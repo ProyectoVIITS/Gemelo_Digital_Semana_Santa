@@ -5,7 +5,7 @@ import { Map, Building2, Shield, Activity } from 'lucide-react';
 const modules = [
   {
     title: 'Monitor NEXUS — Semana Santa 2026',
-    subtitle: 'Sala de control virtual DITRA — 7 corredores, 33 peajes',
+    subtitle: 'Sala de control virtual DITRA — 7 corredores, 37 peajes',
     description: 'Monitor multicanal de corredores críticos con mapa de Colombia, IRT en tiempo real, alertas globales y gráfica comparativa.',
     path: '/monitor',
     icon: Shield,
@@ -14,12 +14,12 @@ const modules = [
     accentBorder: 'rgba(56, 189, 248, 0.25)',
     status: 'Operativo',
     statusColor: '#22c55e',
-    tags: ['7 corredores', '33 peajes', 'IRT tiempo real', 'DITRA'],
+    tags: ['7 corredores', '37 peajes', 'IRT tiempo real', 'DITRA'],
   },
   {
     title: 'Corredores Semana Santa 2026',
-    subtitle: 'Predicción de congestiones en 4 corredores nacionales',
-    description: 'Gemelo digital de tráfico vehicular con IRT, alertas inteligentes y simulación de flujo en tiempo real.',
+    subtitle: 'Simulador predictivo DITRA — 7 corredores, 37 peajes INVÍAS',
+    description: 'Gemelo digital interactivo con 7 escenarios, simulador de salida, 37 peajes individuales, mapa Leaflet y motor IRT v1.0.',
     path: '/semana-santa',
     icon: Map,
     accent: '#f59e0b',
@@ -27,7 +27,7 @@ const modules = [
     accentBorder: 'rgba(245, 158, 11, 0.25)',
     status: 'Operativo',
     statusColor: '#22c55e',
-    tags: ['4 corredores', 'IRT predictivo', 'Alertas'],
+    tags: ['7 corredores', '37 peajes', '7 escenarios', 'Simulador'],
   },
   {
     title: 'Gemelo Digital — Peaje Chuzacá',

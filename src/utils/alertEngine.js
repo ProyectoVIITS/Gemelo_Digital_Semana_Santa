@@ -69,7 +69,7 @@ export function evaluateAlerts({ corridorMetrics, corridors, selectedDay, select
         severity: nivelLluvia === 2 && irt > 70 ? 'critical' : 'warning',
         type: 'weather_compound',
         title: `Lluvia ${rainLabel} + Congestión: ${corridor.name}`,
-        message: `Lluvia ${rainLabel} agrava congestión (IRT ${irt}). Factor impacto: ${corridor.rainImpactFactor}x.`,
+        message: `Lluvia ${rainLabel} agrava congestión (IRT ${irt}). Región ${corridor.region}.`,
         recommendation: 'Reducir velocidad. Riesgo de deslizamientos en zonas de montaña.',
         color: '#3b82f6',
         timestamp: now,
@@ -107,30 +107,25 @@ export function evaluateAlerts({ corridorMetrics, corridors, selectedDay, select
       });
     }
 
-    // 5. Bottleneck-specific alerts
-    if (irt > 70 && corridor.blockagePoints) {
-      const activeBlockages = corridor.blockagePoints.filter(bp => {
-        const localIRT = Math.min(irt * (1 + bp.capacityReduction), 100);
-        return localIRT > 75;
+    // 5. Critical toll station alerts
+    if (irt > 70 && corridor.peajes) {
+      const criticalTolls = corridor.peajes.filter(p => p.critico);
+      criticalTolls.forEach(toll => {
+        const tollIRT = Math.min(irt + 5, 100); // critico: +5 IRT
+        if (tollIRT > 75) {
+          alerts.push({
+            id: `${corridor.id}-toll-${toll.id}`,
+            corridorId: corridor.id,
+            severity: tollIRT > 85 ? 'emergency' : 'critical',
+            type: 'bottleneck',
+            title: `Peaje ${toll.nombre} (${toll.km})`,
+            message: `IRT peaje: ${tollIRT}. Punto crítico del corredor ${corridor.name}.`,
+            recommendation: 'Use pago electrónico. Considere horarios alternativos.',
+            color: alerta.color,
+            timestamp: now,
+          });
+        }
       });
-      if (activeBlockages.length > 0) {
-        const worst = activeBlockages.reduce((a, b) => b.capacityReduction > a.capacityReduction ? b : a);
-        const typeLabels = { peaje: 'Peaje', via: 'Vía', salida: 'Salida urbana', tunel: 'Túnel' };
-        alerts.push({
-          id: `${corridor.id}-bottleneck-${worst.type}`,
-          corridorId: corridor.id,
-          severity: irt > 85 ? 'emergency' : 'critical',
-          type: 'bottleneck',
-          title: `Bloqueo en ${typeLabels[worst.type]}: ${worst.name}`,
-          message: `${worst.description}. Reducción de capacidad: ${Math.round(worst.capacityReduction * 100)}%.`,
-          recommendation: worst.type === 'peaje' ? 'Use pago electrónico para agilizar paso.' :
-            worst.type === 'salida' ? 'Salir en horario no pico.' :
-            worst.type === 'tunel' ? 'Espere paso regulado.' : 'Reducir velocidad en tramo.',
-          color: alerta.color,
-          blockagePoint: worst,
-          timestamp: now,
-        });
-      }
     }
 
     // 6. Time Window Advisory

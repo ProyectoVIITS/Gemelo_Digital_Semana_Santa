@@ -146,3 +146,13 @@ export function generarAnalisisSalida(corridor, dayIndex, nivelLluvia, restricci
     return { hour, irt, tiempo, alerta, recomendacion, volume };
   });
 }
+
+/**
+ * IRT individual por peaje (versión para los 33 nodos)
+ * Combina 70% del IRT del corredor + 30% factor local
+ */
+export function calcularIRTpeaje(volumenPeaje, capacidadCarril, irtCorredor, esCritico) {
+  const factorLocal = Math.min(volumenPeaje / capacidadCarril, 1.6);
+  const base = Math.round(irtCorredor * 0.7 + factorLocal * 30);
+  return Math.min(esCritico ? base + 5 : base, 100);
+}

@@ -2,16 +2,11 @@ import React from 'react';
 import { DAYS } from '../data/corridors';
 import { SCENARIOS } from '../data/scenarios';
 
-/**
- * Panel de controles: selector de día, slider de hora, toggles de lluvia, escenarios.
- */
-
-const RAIN_LEVELS = ['Sin lluvia', 'Moderada', 'Intensa'];
-const RAIN_COLORS = ['#64748b', '#60a5fa', '#3b82f6'];
 const REGIONS = [
-  { key: 'andina', label: 'Andina', sub: 'Bogotá–Girardot, Bogotá–Medellín' },
-  { key: 'orinoquia', label: 'Orinoquía', sub: 'Vía al Llano' },
-  { key: 'caribe', label: 'Caribe', sub: 'Ruta 90 Costera' },
+  { key: 'andina',    label: 'Andina',    desc: 'C1 C3 C4 C5 C6' },
+  { key: 'pacifica',  label: 'Pacífica',  desc: 'C2' },
+  { key: 'orinoquia', label: 'Orinoquía', desc: 'C5' },
+  { key: 'caribe',    label: 'Caribe',    desc: 'C7' },
 ];
 
 export default function ControlPanel({
@@ -22,158 +17,103 @@ export default function ControlPanel({
   carrilReversible, setCarrilReversible,
   activeScenario, onLoadScenario,
 }) {
-  const currentDay = DAYS[selectedDay];
-
-  const cycleRain = (regionKey) => {
-    setRainByRegion(prev => ({
-      ...prev,
-      [regionKey]: (prev[regionKey] + 1) % 3
-    }));
-  };
-
   return (
-    <div className="space-y-4">
-      {/* Selector de día */}
-      <div>
-        <h3 className="text-xs font-semibold text-slate-400 tracking-wider mb-2 uppercase">
-          Día de Semana Santa
-        </h3>
+    <div className="space-y-3">
+      {/* Día */}
+      <div className="bg-viits-card border border-viits-border rounded-lg p-3">
+        <h3 className="text-[10px] uppercase tracking-wider text-slate-500 mb-2">Día de Semana Santa</h3>
         <div className="grid grid-cols-4 gap-1">
-          {DAYS.map(day => (
-            <button
-              key={day.index}
-              onClick={() => setSelectedDay(day.index)}
-              className={`px-1.5 py-1.5 rounded text-[10px] font-medium transition-all border ${
-                selectedDay === day.index
-                  ? day.isHighlight
-                    ? 'bg-amber-500/20 border-amber-500 text-amber-400'
-                    : 'bg-blue-500/20 border-blue-500 text-blue-400'
-                  : 'bg-viits-card border-viits-border text-slate-400 hover:border-slate-500'
-              }`}
-            >
-              <div className="font-bold">{day.short}</div>
-              {day.isHighlight && (
-                <div className="text-[8px] opacity-75 truncate">{day.name.split(' ').slice(-1)}</div>
-              )}
+          {DAYS.map(d => (
+            <button key={d.index} onClick={() => setSelectedDay(d.index)}
+              className={`px-1 py-1.5 rounded text-[9px] font-mono transition-all border ${
+                selectedDay === d.index
+                  ? d.isHighlight ? 'bg-amber-500/20 border-amber-500/50 text-amber-300'
+                    : 'bg-sky-500/20 border-sky-500/50 text-sky-300'
+                  : 'border-transparent text-slate-500 hover:text-slate-300 hover:bg-slate-800/40'
+              }`}>
+              {d.short}
             </button>
           ))}
         </div>
-        <div className="mt-1.5 text-center text-xs text-slate-500">
-          {currentDay.name} — {currentDay.date} 2026
-        </div>
-      </div>
-
-      {/* Slider de hora */}
-      <div>
-        <h3 className="text-xs font-semibold text-slate-400 tracking-wider mb-2 uppercase">
-          Hora del día
-        </h3>
-        <div className="relative">
-          <input
-            type="range"
-            min={0}
-            max={23}
-            value={selectedHour}
-            onChange={(e) => setSelectedHour(parseInt(e.target.value))}
-            className="w-full h-2 bg-viits-card rounded-lg appearance-none cursor-pointer accent-amber-500"
-          />
-          <div className="flex justify-between text-[9px] text-slate-500 mt-1">
-            <span>0:00</span>
-            <span>6:00</span>
-            <span>12:00</span>
-            <span>18:00</span>
-            <span>23:00</span>
+        {DAYS[selectedDay] && (
+          <div className="mt-1.5 text-[9px] text-center text-slate-400">
+            {DAYS[selectedDay].name} · {DAYS[selectedDay].date} 2026
           </div>
+        )}
+      </div>
+
+      {/* Hora */}
+      <div className="bg-viits-card border border-viits-border rounded-lg p-3">
+        <div className="flex items-center justify-between mb-2">
+          <h3 className="text-[10px] uppercase tracking-wider text-slate-500">Hora</h3>
+          <span className="font-mono text-sm text-sky-400">{String(selectedHour).padStart(2,'0')}:00</span>
         </div>
-        <div className="text-center mt-1">
-          <span className="font-mono text-lg text-amber-400 font-bold">
-            {String(selectedHour).padStart(2, '0')}:00
-          </span>
+        <input type="range" min={0} max={23} value={selectedHour}
+          onChange={e => setSelectedHour(Number(e.target.value))}
+          className="w-full h-1.5 accent-sky-500 cursor-pointer" />
+        <div className="flex justify-between text-[8px] text-slate-600 mt-1">
+          <span>00:00</span><span className="text-amber-500">06</span>
+          <span className="text-red-500">12</span><span className="text-amber-500">18</span>
+          <span>23:00</span>
         </div>
       </div>
 
-      {/* Toggles de lluvia */}
-      <div>
-        <h3 className="text-xs font-semibold text-slate-400 tracking-wider mb-2 uppercase">
-          Condición Climática
-        </h3>
-        <div className="space-y-1.5">
-          {REGIONS.map(region => (
-            <button
-              key={region.key}
-              onClick={() => cycleRain(region.key)}
-              className="w-full flex items-center justify-between bg-viits-card border border-viits-border rounded px-2.5 py-1.5 hover:border-slate-500 transition-colors"
-            >
-              <div className="text-left">
-                <div className="text-[11px] text-slate-300">{region.label}</div>
-                <div className="text-[8px] text-slate-500">{region.sub}</div>
-              </div>
-              <div
-                className="text-[10px] font-semibold px-2 py-0.5 rounded"
-                style={{
-                  color: RAIN_COLORS[rainByRegion[region.key]],
-                  backgroundColor: `${RAIN_COLORS[rainByRegion[region.key]]}15`,
-                }}
-              >
-                {rainByRegion[region.key] === 2 ? '🌧️ ' : rainByRegion[region.key] === 1 ? '🌦️ ' : '☀️ '}
-                {RAIN_LEVELS[rainByRegion[region.key]]}
-              </div>
-            </button>
-          ))}
-        </div>
-      </div>
-
-      {/* Medidas operativas */}
-      <div>
-        <h3 className="text-xs font-semibold text-slate-400 tracking-wider mb-2 uppercase">
-          Medidas Operativas
-        </h3>
-        <div className="space-y-1.5">
-          <label className="flex items-center gap-2 bg-viits-card border border-viits-border rounded px-2.5 py-2 cursor-pointer hover:border-slate-500">
-            <input
-              type="checkbox"
-              checked={restriccionPesados}
-              onChange={(e) => setRestricionPesados(e.target.checked)}
-              className="accent-amber-500"
-            />
+      {/* Lluvia por región */}
+      <div className="bg-viits-card border border-viits-border rounded-lg p-3">
+        <h3 className="text-[10px] uppercase tracking-wider text-slate-500 mb-2">Lluvia por Región</h3>
+        {REGIONS.map(r => (
+          <div key={r.key} className="flex items-center justify-between mb-1.5 last:mb-0">
             <div>
-              <div className="text-[11px] text-slate-300">Restricción de Pesados</div>
-              <div className="text-[8px] text-slate-500">Vehículos ≥3.4 ton fuera de vía</div>
+              <span className="text-[10px] text-slate-300">{r.label}</span>
+              <span className="text-[8px] text-slate-600 ml-1">({r.desc})</span>
             </div>
-          </label>
-          <label className="flex items-center gap-2 bg-viits-card border border-viits-border rounded px-2.5 py-2 cursor-pointer hover:border-slate-500">
-            <input
-              type="checkbox"
-              checked={carrilReversible}
-              onChange={(e) => setCarrilReversible(e.target.checked)}
-              className="accent-amber-500"
-            />
-            <div>
-              <div className="text-[11px] text-slate-300">Carril Reversible</div>
-              <div className="text-[8px] text-slate-500">Salida sur Bogotá activo</div>
+            <div className="flex gap-0.5">
+              {[0, 1, 2].map(i => (
+                <button key={i} onClick={() => setRainByRegion({ ...rainByRegion, [r.key]: i })}
+                  className={`w-6 h-6 rounded text-[10px] transition-all border ${
+                    rainByRegion[r.key] === i
+                      ? i === 0 ? 'bg-slate-700/50 border-slate-500 text-slate-300'
+                        : i === 1 ? 'bg-blue-500/20 border-blue-500/50 text-blue-400'
+                        : 'bg-red-500/20 border-red-500/50 text-red-400'
+                      : 'border-transparent text-slate-600 hover:text-slate-400'
+                  }`}>
+                  {i === 0 ? '☀' : i === 1 ? '🌧' : '⛈'}
+                </button>
+              ))}
             </div>
-          </label>
-        </div>
+          </div>
+        ))}
       </div>
 
-      {/* Escenarios precargados */}
-      <div>
-        <h3 className="text-xs font-semibold text-slate-400 tracking-wider mb-2 uppercase">
-          Escenarios Rápidos
-        </h3>
-        <div className="grid grid-cols-2 gap-1.5">
-          {SCENARIOS.map(scenario => (
-            <button
-              key={scenario.id}
-              onClick={() => onLoadScenario(scenario)}
-              className={`text-left px-2 py-2 rounded border transition-all text-[10px] ${
-                activeScenario === scenario.id
-                  ? 'bg-amber-500/15 border-amber-500/50 text-amber-300'
-                  : 'bg-viits-card border-viits-border text-slate-400 hover:border-slate-500 hover:text-slate-300'
-              }`}
-            >
-              <div className="font-semibold">{scenario.icon} {scenario.name}</div>
-              <div className="text-[8px] opacity-70 mt-0.5">{scenario.description}</div>
+      {/* Medidas Operativas */}
+      <div className="bg-viits-card border border-viits-border rounded-lg p-3">
+        <h3 className="text-[10px] uppercase tracking-wider text-slate-500 mb-2">Medidas Operativas</h3>
+        <label className="flex items-center gap-2 cursor-pointer mb-1.5">
+          <input type="checkbox" checked={carrilReversible}
+            onChange={e => setCarrilReversible(e.target.checked)} className="accent-sky-500" />
+          <span className="text-[10px] text-slate-300">Carril reversible <span className="text-slate-500">(C3, C6)</span></span>
+        </label>
+        <label className="flex items-center gap-2 cursor-pointer">
+          <input type="checkbox" checked={restriccionPesados}
+            onChange={e => setRestricionPesados(e.target.checked)} className="accent-sky-500" />
+          <span className="text-[10px] text-slate-300">Restricción pesados <span className="text-slate-500">(C3, C5, C6)</span></span>
+        </label>
+      </div>
+
+      {/* Escenarios */}
+      <div className="bg-viits-card border border-viits-border rounded-lg p-3">
+        <h3 className="text-[10px] uppercase tracking-wider text-slate-500 mb-2">Escenarios ({SCENARIOS.length})</h3>
+        <div className="space-y-1">
+          {SCENARIOS.map(s => (
+            <button key={s.id} onClick={() => onLoadScenario(s)}
+              className={`w-full text-left px-2 py-1.5 rounded text-[9px] transition-all border ${
+                activeScenario === s.id
+                  ? 'bg-sky-500/15 border-sky-500/40 text-sky-300'
+                  : 'border-transparent text-slate-400 hover:text-slate-200 hover:bg-slate-800/40'
+              }`}>
+              <span className="mr-1">{s.icon}</span>
+              <span className="font-medium">{s.name}</span>
+              <div className="text-[8px] text-slate-600 mt-0.5 ml-5">{s.description}</div>
             </button>
           ))}
         </div>

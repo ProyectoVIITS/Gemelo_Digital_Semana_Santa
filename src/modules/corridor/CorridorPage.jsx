@@ -2,13 +2,16 @@
  * CorridorPage — Vista de corredor con tarjetas de peaje (mini-canvas)
  * El corredor es un agrupador de módulos de peaje.
  */
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
-import { ArrowLeft, Shield, Wifi, Gauge, Activity, AlertTriangle } from 'lucide-react';
+import { MapContainer, TileLayer, CircleMarker, Tooltip as LTooltip, Polyline } from 'react-leaflet';
+import { ArrowLeft, Shield, Wifi, Gauge, Activity, AlertTriangle, Skull, Zap, Car, Clock, Search, Calendar, MapPin } from 'lucide-react';
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, ReferenceLine } from 'recharts';
 import { getCorridorById, getIRTLevel } from '../../data/nexusCorridors';
 import { useCorridorData } from '../../hooks/useCorridorData';
 import { useGlobalAlerts } from '../../hooks/useGlobalAlerts';
+import { useAccidentData } from '../../hooks/useAccidentData';
+import { getNivelRiesgo, RIESGO_COLORS, RIESGO_LABELS } from '../../data/accidentUtils';
 import TollStationCard from './components/TollStationCard';
 import LoadingScreen from '../../components/shared/LoadingScreen';
 
@@ -132,6 +135,311 @@ function CorridorAlerts({ alerts, corridorColor }) {
   );
 }
 
+/* ─── Corridor Accident Panel (IRA) — Rediseño moderno ─── */
+function CorridorAccidentPanel({ corridorId, corridorColor }) {
+  const accData = useAccidentData();
+  const stats = accData.getCorridorStats(corridorId);
+  const top5 = accData.getTopHotspots(corridorId, 5);
+  const ssHots = accData.getSemSantaHotspots(corridorId);
+
+  if (!accData.hasData || !stats) return null;
+
+  const NIVEL_BADGE = {
+    MUY_ALTO: { label: 'ZONA NEGRA', bg: '#7f1d1d', text: '#fca5a5' },
+    ALTO:     { label: 'ALTO',       bg: '#7f1d1d88', text: '#fca5a5' },
+    MEDIO:    { label: 'MEDIO',      bg: '#78350f88', text: '#fbbf24' },
+    BAJO:     { label: 'BAJO',       bg: '#1a2d4a',   text: '#94a3b8' },
+  };
+
+  const kpis = [
+    { label: 'INCIDENTES',  value: stats.totalIncidentes?.toLocaleString('es-CO'), color: '#f59e0b', Icon: AlertTriangle },
+    { label: 'FALLECIDOS',  value: stats.muertos,       color: '#ef4444', Icon: Skull },
+    { label: 'LESIONADOS',  value: stats.lesionados?.toLocaleString('es-CO'), color: '#fb923c', Icon: Zap },
+    { label: 'IRA PROMEDIO',value: stats.iraPromedio?.toFixed(1), color: corridorColor, Icon: Gauge },
+  ];
+
+  const insights = [
+    { label: 'Vehículo dominante', value: stats.vehiculoDominante, Icon: Car, color: '#38bdf8' },
+    { label: 'Hora crítica',       value: stats.horaCritica,       Icon: Clock, color: '#a78bfa' },
+    { label: 'Causa principal',    value: (stats.hipotesisPrincipal || '').slice(0, 30), Icon: Search, color: '#f59e0b' },
+  ];
+
+  const avgSSFactor = ssHots.length > 0
+    ? Math.round(ssHots.reduce((s, h) => s + h.factorSemSanta, 0) / ssHots.length)
+    : 0;
+
+  return (
+    <div className="rounded-lg border p-4" style={CARD}>
+      {/* ── Header ── */}
+      <div className="flex items-center justify-between mb-4">
+        <div className="flex items-center gap-2">
+          <div className="w-7 h-7 rounded flex items-center justify-center" style={{ background: 'rgba(239, 68, 68, 0.12)', border: '1px solid rgba(239, 68, 68, 0.25)' }}>
+            <AlertTriangle className="w-4 h-4 text-red-400" />
+          </div>
+          <div>
+            <div className="text-[11px] font-bold text-slate-200">Índice Predictivo de Accidentabilidad</div>
+            <div className="text-[8px] text-slate-600 font-mono">Fuente: Base DITRA/INVÍAS · 2023–2025 · {stats.totalIncidentes?.toLocaleString('es-CO')} registros</div>
+          </div>
+        </div>
+        <div className="px-2 py-1 rounded text-[8px] font-mono font-bold" style={{ background: 'rgba(239, 68, 68, 0.08)', border: '1px solid rgba(239, 68, 68, 0.2)', color: '#ef4444' }}>
+          IRA {stats.iraPromedio?.toFixed(1)}
+        </div>
+      </div>
+
+      {/* ── KPIs con íconos ── */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-2 mb-4">
+        {kpis.map(({ label, value, color, Icon }) => (
+          <div key={label} className="rounded-lg p-3 flex items-center gap-3"
+            style={{ backgroundColor: '#090f1c', borderLeft: `3px solid ${color}` }}>
+            <Icon className="w-4 h-4 flex-shrink-0" style={{ color }} />
+            <div>
+              <div className="text-lg font-bold font-mono leading-none" style={{ color }}>{value}</div>
+              <div className="text-[7px] text-slate-600 tracking-wider mt-0.5">{label}</div>
+            </div>
+          </div>
+        ))}
+      </div>
+
+      {/* ── Insights como pills ── */}
+      <div className="flex flex-wrap gap-2 mb-4">
+        {insights.map(({ label, value, Icon, color }) => (
+          <div key={label} className="flex items-center gap-2 px-3 py-1.5 rounded-full"
+            style={{ backgroundColor: '#090f1c', border: '1px solid #1a2d4a' }}>
+            <Icon className="w-3 h-3" style={{ color }} />
+            <span className="text-[8px] text-slate-500">{label}:</span>
+            <span className="text-[9px] font-bold text-slate-200">{value || '—'}</span>
+          </div>
+        ))}
+      </div>
+
+      {/* ── Alerta Semana Santa ── */}
+      {ssHots.length > 0 && (
+        <div className="mb-4 rounded-lg p-3 flex items-center gap-3"
+          style={{ background: 'linear-gradient(135deg, rgba(245,158,11,0.06), rgba(245,158,11,0.02))', border: '1px solid rgba(245,158,11,0.2)' }}>
+          <div className="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0"
+            style={{ background: 'rgba(245,158,11,0.15)' }}>
+            <Calendar className="w-4 h-4 text-amber-400 animate-pulse" />
+          </div>
+          <div className="flex-1">
+            <div className="text-[10px] font-bold text-amber-400 mb-1">
+              {ssHots.length} zona{ssHots.length > 1 ? 's' : ''} con alto riesgo en Semana Santa
+            </div>
+            <div className="text-[8px] text-slate-500 mb-1.5">
+              Estos puntos concentran &gt;40% de incidentes en marzo-abril. Factor promedio: {avgSSFactor}%
+            </div>
+            {/* Progress bar */}
+            <div className="h-1.5 w-full rounded-full bg-[#1a2d4a] overflow-hidden">
+              <div className="h-full rounded-full transition-all duration-700"
+                style={{ width: `${avgSSFactor}%`, background: 'linear-gradient(90deg, #f59e0b, #ef4444)' }} />
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Mapa de Hotspots del Corredor ── */}
+      {top5.length > 0 && (
+        <div className="mb-4">
+          <div className="text-[9px] text-slate-600 tracking-widest uppercase mb-2">
+            <MapPin className="w-3 h-3 inline mr-1" style={{ color: corridorColor }} />
+            Ubicación de zonas de riesgo — {corridorId}
+          </div>
+          <div className="rounded-lg overflow-hidden border" style={{ borderColor: '#1a2d4a', height: 280 }}>
+            <MapContainer
+              center={[
+                top5.reduce((s, h) => s + h.lat, 0) / top5.length,
+                top5.reduce((s, h) => s + h.lng, 0) / top5.length,
+              ]}
+              zoom={9}
+              zoomControl={true}
+              scrollWheelZoom={true}
+              style={{ height: '100%', width: '100%', background: '#06111e' }}
+            >
+              <TileLayer
+                url="https://{s}.basemaps.cartocdn.com/dark_nolabels/{z}/{x}/{y}{r}.png"
+                maxZoom={18}
+              />
+              <TileLayer
+                url="https://{s}.basemaps.cartocdn.com/dark_only_labels/{z}/{x}/{y}{r}.png"
+                maxZoom={18}
+                opacity={0.5}
+              />
+
+              {/* Corridor route polyline */}
+              {(() => {
+                const corridor = getCorridorById(corridorId);
+                if (!corridor) return null;
+                const positions = corridor.tollStations.map(t => [t.lat, t.lng]);
+                return (
+                  <Polyline
+                    positions={positions}
+                    pathOptions={{ color: corridorColor, weight: 3, opacity: 0.4, dashArray: '8 4' }}
+                  />
+                );
+              })()}
+
+              {/* All corridor hotspots (dimmed) */}
+              {accData.getHotspotsByCorridor(corridorId)
+                .filter(h => !top5.find(t => t.id === h.id))
+                .map(hs => (
+                  <CircleMarker
+                    key={hs.id}
+                    center={[hs.lat, hs.lng]}
+                    radius={3}
+                    pathOptions={{ color: '#475569', fillColor: '#475569', fillOpacity: 0.3, weight: 1, opacity: 0.4 }}
+                  />
+                ))
+              }
+
+              {/* Top 5 hotspots (highlighted) */}
+              {top5.map((hs, idx) => {
+                const nivel = getNivelRiesgo(hs.iraScore);
+                const hColor = RIESGO_COLORS[nivel];
+                return (
+                  <React.Fragment key={hs.id}>
+                    {/* Outer pulse */}
+                    <CircleMarker
+                      center={[hs.lat, hs.lng]}
+                      radius={14}
+                      pathOptions={{ color: hColor, fillColor: hColor, fillOpacity: 0.08, weight: 1, opacity: 0.3 }}
+                    />
+                    {/* Main marker */}
+                    <CircleMarker
+                      center={[hs.lat, hs.lng]}
+                      radius={8}
+                      pathOptions={{
+                        color: hs.severidadMax === 'FATAL' ? '#fff' : hColor,
+                        fillColor: hColor,
+                        fillOpacity: 0.9,
+                        weight: 2,
+                        opacity: 1,
+                      }}
+                    >
+                      <LTooltip direction="top" offset={[0, -10]} className="viits-toll-label" permanent={false}>
+                        <div>
+                          <div style={{ fontWeight: 'bold', color: hColor, fontSize: 11, marginBottom: 2 }}>
+                            #{idx + 1} · IRA {hs.iraScore}/100
+                          </div>
+                          <div style={{ fontSize: 9, color: '#94a3b8', marginBottom: 2 }}>
+                            {hs.totalIncidentes} incidentes · {hs.muertos > 0 ? `☠ ${hs.muertos} muertos · ` : ''}{hs.lesionados} heridos
+                          </div>
+                          <div style={{ fontSize: 8, color: '#64748b' }}>
+                            {hs.vehiculoPrincipal} · {hs.horaCritica}
+                          </div>
+                          {hs.hipotesisPrincipal && hs.hipotesisPrincipal !== 'SIN DATOS' && (
+                            <div style={{ fontSize: 8, color: '#f59e0b', marginTop: 2 }}>
+                              Causa: {hs.hipotesisPrincipal.slice(0, 30)}
+                            </div>
+                          )}
+                        </div>
+                      </LTooltip>
+                    </CircleMarker>
+                  </React.Fragment>
+                );
+              })}
+            </MapContainer>
+          </div>
+        </div>
+      )}
+
+      {/* ── Top 5 Hotspots — Card Grid ── */}
+      <div className="mb-3">
+        <div className="text-[9px] text-slate-600 tracking-widest uppercase mb-3">
+          Top zonas de riesgo predictivo
+        </div>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+          {top5.map((hs, idx) => {
+            const nivel = getNivelRiesgo(hs.iraScore);
+            const color = RIESGO_COLORS[nivel];
+            const badge = NIVEL_BADGE[nivel];
+            return (
+              <div key={hs.id} className="rounded-lg overflow-hidden"
+                style={{ backgroundColor: color + '08', border: `1px solid ${color}22` }}>
+
+                {/* Card header with IRA */}
+                <div className="flex items-center gap-3 p-3 pb-2">
+                  <div className="flex items-center gap-2 flex-shrink-0" style={{ borderLeft: `4px solid ${color}`, paddingLeft: 8 }}>
+                    <div className="text-[10px] font-mono text-slate-600">#{idx + 1}</div>
+                    <div className="text-2xl font-bold font-mono leading-none" style={{ color }}>{hs.iraScore}</div>
+                    <div className="text-[7px] text-slate-600 font-mono">/ 100</div>
+                  </div>
+                  <div className="ml-auto">
+                    <span className="text-[8px] font-bold px-2 py-0.5 rounded-full"
+                      style={{ background: badge.bg, color: badge.text }}>
+                      {badge.label}
+                    </span>
+                  </div>
+                </div>
+
+                {/* IRA progress bar */}
+                <div className="px-3 mb-2">
+                  <div className="h-1.5 w-full rounded-full bg-[#0a0f1e] overflow-hidden">
+                    <div className="h-full rounded-full transition-all duration-500"
+                      style={{
+                        width: `${hs.iraScore}%`,
+                        background: `linear-gradient(90deg, ${color}88, ${color})`,
+                      }} />
+                  </div>
+                </div>
+
+                {/* Micro-metrics 2x2 */}
+                <div className="grid grid-cols-4 gap-px mx-3 mb-2 rounded overflow-hidden">
+                  {[
+                    { icon: '☠', label: 'Muertos', val: hs.muertos, c: hs.muertos > 0 ? '#ef4444' : '#334155' },
+                    { icon: '⚡', label: 'Heridos', val: hs.lesionados, c: hs.lesionados > 0 ? '#fb923c' : '#334155' },
+                    { icon: '📍', label: 'Incid.', val: hs.totalIncidentes, c: '#38bdf8' },
+                    { icon: '📅', label: 'Sem.S', val: `${hs.factorSemSanta}%`, c: hs.factorSemSanta > 40 ? '#f59e0b' : '#334155' },
+                  ].map(m => (
+                    <div key={m.label} className="text-center py-1.5" style={{ backgroundColor: '#090f1c' }}>
+                      <div className="text-[10px] font-bold font-mono" style={{ color: m.c }}>{m.icon} {m.val}</div>
+                      <div className="text-[6px] text-slate-700 uppercase">{m.label}</div>
+                    </div>
+                  ))}
+                </div>
+
+                {/* Footer: causa + vehículo + hora */}
+                <div className="flex flex-wrap gap-1.5 px-3 pb-3">
+                  {hs.hipotesisPrincipal && hs.hipotesisPrincipal !== 'SIN DATOS' && (
+                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[7px] text-slate-400"
+                      style={{ backgroundColor: '#0a0f1e', border: '1px solid #1a2d4a' }}>
+                      <Search className="w-2.5 h-2.5" /> {hs.hipotesisPrincipal.slice(0, 22)}
+                    </span>
+                  )}
+                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[7px] text-slate-400"
+                    style={{ backgroundColor: '#0a0f1e', border: '1px solid #1a2d4a' }}>
+                    <Car className="w-2.5 h-2.5" /> {hs.vehiculoPrincipal}
+                  </span>
+                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[7px] text-slate-400"
+                    style={{ backgroundColor: '#0a0f1e', border: '1px solid #1a2d4a' }}>
+                    <Clock className="w-2.5 h-2.5" /> {hs.horaCritica}
+                  </span>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* ── Leyenda IRA compacta ── */}
+      <div className="flex items-center justify-between pt-3" style={{ borderTop: '1px solid #1a2d4a' }}>
+        <div className="flex gap-3">
+          {[
+            { label: 'ZONA NEGRA', range: '80-100', color: '#7f1d1d' },
+            { label: 'ALTO',       range: '60-79',  color: '#ef4444' },
+            { label: 'MEDIO',      range: '40-59',  color: '#f97316' },
+            { label: 'BAJO',       range: '<40',     color: '#eab308' },
+          ].map(item => (
+            <div key={item.label} className="flex items-center gap-1">
+              <div className="w-2 h-2 rounded-sm" style={{ backgroundColor: item.color }} />
+              <span className="text-[7px] text-slate-600 font-mono">{item.label}</span>
+            </div>
+          ))}
+        </div>
+        <span className="text-[7px] text-slate-700 font-mono">IRA = Severidad × Hora × Vehículo × Estacional</span>
+      </div>
+    </div>
+  );
+}
+
 /* ═══════════════════════════════════════════════════════════════
    ★ MAIN: CorridorPage
    ═══════════════════════════════════════════════════════════════ */
@@ -212,6 +520,11 @@ export default function CorridorPage() {
 
         {/* IRT Chart */}
         <CorridorIRTChart irtHistory={history} corridor={corridor} />
+
+        {/* ── ACCIDENTABILIDAD PREDICTIVA ─────────────────── */}
+        <div className="mt-4">
+          <CorridorAccidentPanel corridorId={corridorId} corridorColor={corridor.color} />
+        </div>
 
         {/* ── PEAJES DEL CORREDOR ─────────────────────────── */}
         <div className="mt-4">

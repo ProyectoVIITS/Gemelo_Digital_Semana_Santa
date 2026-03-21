@@ -10,6 +10,8 @@ import { LineChart, Line, AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip,
 import { NEXUS_CORRIDORS, getIRTLevel, TOTAL_TOLL_STATIONS, CORRIDOR_COLORS } from '../../data/nexusCorridors';
 import { useCorridorData } from '../../hooks/useCorridorData';
 import { useGlobalAlerts } from '../../hooks/useGlobalAlerts';
+import { useAccidentData } from '../../hooks/useAccidentData';
+import { getNivelRiesgo, RIESGO_COLORS, RIESGO_LABELS, RIESGO_RANGES } from '../../data/accidentUtils';
 import MonitorLoadingScreen from './LoadingScreen';
 
 /* ─── Shared style constants (matching Chuzacá) ─── */
@@ -203,7 +205,7 @@ function MapBoundsController({ corridors }) {
   return null;
 }
 
-function ColombiaMapPanel({ corridorData, onSelectCorridor, onSelectToll }) {
+function ColombiaMapPanel({ corridorData, onSelectCorridor, onSelectToll, showAccidentLayer, accidentHotspots }) {
   useEffect(() => { injectPulseCSS(); }, []);
 
   /* Memo: corridor polyline paths */
@@ -336,6 +338,82 @@ function ColombiaMapPanel({ corridorData, onSelectCorridor, onSelectToll }) {
               </CircleMarker>
             );
           })}
+          {/* ── Accident Hotspot markers ── */}
+          {showAccidentLayer && accidentHotspots && accidentHotspots.map(hs => {
+            const nivel = getNivelRiesgo(hs.iraScore);
+            const color = RIESGO_COLORS[nivel];
+            const isFatal = hs.severidadMax === 'FATAL';
+            const r = isFatal ? 9 : hs.iraScore >= 60 ? 7 : 5;
+
+            return (
+              <React.Fragment key={hs.id}>
+                {/* Outer glow ring */}
+                <CircleMarker
+                  center={[hs.lat, hs.lng]}
+                  radius={r + 6}
+                  pathOptions={{
+                    color: color,
+                    fillColor: color,
+                    fillOpacity: 0.08,
+                    weight: 1,
+                    opacity: 0.25,
+                  }}
+                />
+                {/* Semana Santa ring */}
+                {hs.factorSemSanta > 40 && (
+                  <CircleMarker
+                    center={[hs.lat, hs.lng]}
+                    radius={r + 3}
+                    pathOptions={{
+                      color: '#f59e0b',
+                      fillColor: 'transparent',
+                      fillOpacity: 0,
+                      weight: 1.5,
+                      opacity: 0.7,
+                      dashArray: '3 3',
+                    }}
+                  />
+                )}
+                {/* Main hotspot marker */}
+                <CircleMarker
+                  center={[hs.lat, hs.lng]}
+                  radius={r}
+                  pathOptions={{
+                    color: isFatal ? '#fff' : color,
+                    fillColor: color,
+                    fillOpacity: 0.85,
+                    weight: isFatal ? 2 : 1,
+                    opacity: 1,
+                  }}
+                >
+                  <LTooltip direction="top" offset={[0, -10]} className="viits-toll-label">
+                    <div>
+                      <div style={{ color, fontWeight: 'bold', fontSize: 11, marginBottom: 3 }}>
+                        ⚠ {RIESGO_LABELS[nivel]} — IRA {hs.iraScore}/100
+                      </div>
+                      <div style={{ display: 'flex', gap: 10, marginBottom: 3, fontSize: 9 }}>
+                        {hs.muertos > 0 && <span style={{ color: '#ef4444' }}>☠ {hs.muertos} muertos</span>}
+                        <span style={{ color: '#f59e0b' }}>⚡ {hs.lesionados} heridos</span>
+                        <span style={{ color: '#94a3b8' }}>📍 {hs.totalIncidentes} inc.</span>
+                      </div>
+                      <div style={{ fontSize: 9, color: '#94a3b8', marginBottom: 2 }}>
+                        Causa: <span style={{ color: '#e2e8f0' }}>{hs.hipotesisPrincipal}</span>
+                      </div>
+                      <div style={{ fontSize: 9, color: '#94a3b8', marginBottom: 2 }}>
+                        Veh: <span style={{ color: '#e2e8f0' }}>{hs.vehiculoPrincipal}</span> · Hora: <span style={{ color: '#f97316' }}>{hs.horaCritica}</span>
+                      </div>
+                      {hs.factorSemSanta > 30 && (
+                        <div style={{ fontSize: 8, color: '#f59e0b', marginTop: 3, padding: '2px 4px', background: 'rgba(245,158,11,0.1)', borderRadius: 3 }}>
+                          📅 {hs.factorSemSanta}% ocurren en Semana Santa
+                        </div>
+                      )}
+                    </div>
+                  </LTooltip>
+                </CircleMarker>
+              </React.Fragment>
+            );
+          })}
+
         </MapContainer>
       </div>
 
@@ -460,11 +538,105 @@ function MonitorStatusBar() {
 }
 
 /* ─── Main Component ─── */
+/* ─── Global Accident Summary Panel ─── */
+function GlobalAccidentSummary({ accData }) {
+  if (!accData.hasData) return null;
+
+  const ranking = Object.values(accData.data.resumenPorCorredor || {})
+    .sort((a, b) => b.iraTotal - a.iraTotal);
+  const maxIRA = Math.max(...ranking.map(r => r.iraTotal), 1);
+
+  return (
+    <div className="rounded-lg border p-4" style={CARD}>
+      <div className="flex items-center justify-between mb-3">
+        <div>
+          <div className="text-[11px] font-bold text-slate-200">
+            Inteligencia de Seguridad Vial — DITRA
+          </div>
+          <div className="text-[8px] text-slate-600 mt-0.5 font-mono">
+            {accData.totalIncidentes.toLocaleString('es-CO')} incidentes históricos · {accData.totalHotspots} zonas de riesgo · {accData.hotspotsZonaNegra} zonas negras
+          </div>
+        </div>
+        <div className="text-[8px] text-slate-700 font-mono">Fuente: Base DITRA/INVÍAS</div>
+      </div>
+
+      <div className="text-[9px] text-slate-600 tracking-widest uppercase mb-2">
+        Ranking de riesgo — 7 corredores
+      </div>
+      <div className="flex flex-col gap-1">
+        {ranking.map((stats, idx) => {
+          const nivelColor = stats.iraPromedio >= 8 ? '#ef4444'
+                           : stats.iraPromedio >= 5 ? '#f97316'
+                           : stats.iraPromedio >= 3 ? '#eab308' : '#22c55e';
+          const corridor = NEXUS_CORRIDORS.find(c => c.id === stats.corridorId);
+          const pctBar = Math.min(100, stats.iraTotal / maxIRA * 100);
+
+          return (
+            <div key={stats.corridorId} className="flex items-center gap-3">
+              <div className="text-[9px] font-bold font-mono w-4 text-slate-600">{idx + 1}</div>
+              <div className="w-1.5 h-6 rounded-full flex-shrink-0" style={{ background: corridor?.color || '#38bdf8' }} />
+              <div className="text-[9px] text-slate-300 w-36 truncate">{stats.nombre}</div>
+              <div className="flex-1 h-2 bg-[#090f1c] rounded overflow-hidden">
+                <div className="h-full rounded transition-all duration-500"
+                     style={{ width: `${pctBar}%`, background: nivelColor + 'cc' }} />
+              </div>
+              <div className="text-[8px] font-mono w-20 text-right">
+                <span style={{ color: '#ef4444' }}>☠{stats.muertos}</span>
+                <span style={{ color: '#f59e0b' }}> ⚡{stats.lesionados.toLocaleString('es-CO')}</span>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+/* ─── Accident Legend ─── */
+function AccidentLegend({ accData }) {
+  if (!accData.hasData) return null;
+  const items = [
+    { nivel: 'IRA 80-100', label: 'ZONA NEGRA', color: '#7f1d1d', icon: '▲' },
+    { nivel: 'IRA 60-79',  label: 'ALTO',       color: '#ef4444', icon: '▲' },
+    { nivel: 'IRA 40-59',  label: 'MEDIO',      color: '#f97316', icon: '◆' },
+    { nivel: 'IRA < 40',   label: 'BAJO',       color: '#eab308', icon: '●' },
+  ];
+  return (
+    <div className="rounded-lg border p-3" style={{ ...CARD, backgroundColor: 'rgba(9, 15, 28, 0.8)' }}>
+      <div className="text-[9px] text-slate-600 tracking-widest uppercase mb-2">
+        Índice de Riesgo de Accidentabilidad (IRA) — Metodología
+      </div>
+      <div className="flex gap-3 mb-2 flex-wrap">
+        {items.map(item => (
+          <div key={item.nivel} className="flex items-center gap-1.5">
+            <span style={{ color: item.color, fontSize: 10 }}>{item.icon}</span>
+            <div>
+              <div className="text-[7px] font-bold" style={{ color: item.color }}>{item.label}</div>
+              <div className="text-[6px] text-slate-700">{item.nivel}</div>
+            </div>
+          </div>
+        ))}
+        <div className="flex items-center gap-1.5 ml-2 pl-2 border-l border-[#1a2d4a]">
+          <span style={{ color: '#f59e0b', fontSize: 10 }}>◌</span>
+          <div className="text-[7px] text-[#f59e0b]">Alto riesgo<br/>Semana Santa</div>
+        </div>
+      </div>
+      <div className="text-[7px] text-slate-700 font-mono">
+        IRA = Severidad(☠×10 / ⚡×5 / ×2) × FactorHorario × FactorVehicular × FactorEstacional
+        <br/>Clustering: radio 500m · Top 15 hotspots por corredor
+        <br/>Fuente: Base de incidentes DITRA/INVÍAS 2023–2025 · {accData.totalIncidentes.toLocaleString('es-CO')} registros procesados
+      </div>
+    </div>
+  );
+}
+
 export default function MonitorPage() {
   const [loading, setLoading] = useState(true);
   const [clock, setClock] = useState(new Date());
+  const [showAccidentLayer, setShowAccidentLayer] = useState(false);
   const { corridorData, irtHistory, globalMetrics } = useCorridorData(2000);
   const { alerts, alertsByCorridor } = useGlobalAlerts(corridorData);
+  const accData = useAccidentData();
 
   const handleLoadComplete = useCallback(() => setLoading(false), []);
 
@@ -489,13 +661,21 @@ export default function MonitorPage() {
         <GlobalKPIs globalMetrics={globalMetrics} alertCount={alerts.length} />
 
         <div className="grid grid-cols-12 gap-3 mt-3">
-          {/* Left column — Map + Alerts (5/12) */}
+          {/* Left column — Map + Layers + Alerts (5/12) */}
           <div className="col-span-12 xl:col-span-5 space-y-3">
-            <ColombiaMapPanel corridorData={corridorData} onSelectCorridor={(id) => navigateTo(`/monitor/${id}`)} onSelectToll={(cId, tId) => navigateTo(`/monitor/${cId}/${tId.toLowerCase()}`)} />
+            <ColombiaMapPanel
+              corridorData={corridorData}
+              onSelectCorridor={(id) => navigateTo(`/monitor/${id}`)}
+              onSelectToll={(cId, tId) => navigateTo(`/monitor/${cId}/${tId.toLowerCase()}`)}
+              showAccidentLayer={showAccidentLayer}
+              accidentHotspots={accData.hotspots}
+            />
+
+            {/* Map Layer Controls */}
             <AlertFeedPanel alerts={alerts} />
           </div>
 
-          {/* Right column — Cards + Chart (7/12) */}
+          {/* Right column — Cards + Accident Summary + Chart (7/12) */}
           <div className="col-span-12 xl:col-span-7 space-y-3">
             {/* Corridor Cards Grid */}
             <div className="rounded-lg border p-3" style={CARD}>
@@ -517,8 +697,14 @@ export default function MonitorPage() {
               </div>
             </div>
 
+            {/* Global Accident Summary */}
+            <GlobalAccidentSummary accData={accData} />
+
             {/* IRT Comparison Chart */}
             <IRTComparisonChart irtHistory={irtHistory} />
+
+            {/* Accident Legend */}
+            <AccidentLegend accData={accData} />
           </div>
         </div>
       </main>

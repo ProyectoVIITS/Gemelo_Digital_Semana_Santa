@@ -6,13 +6,18 @@
 import React, { useRef, useEffect, useCallback } from 'react';
 
 const VEHICLE_CATEGORIES = {
+  M:  { name: 'Motocicleta',    color: '#4ade80', width: 12, height: 6,  speedFactor: 1.3, isMoto: true },
   C1: { name: 'Automóvil',     color: '#38bdf8', width: 22, height: 10, speedFactor: 1.0 },
   C2: { name: 'Bus',           color: '#f97316', width: 36, height: 12, speedFactor: 0.75 },
   C3: { name: 'Camión 2 ejes', color: '#a78bfa', width: 40, height: 13, speedFactor: 0.6 },
   C4: { name: 'Camión 3+ ejes',color: '#94a3b8', width: 48, height: 14, speedFactor: 0.5 },
   C5: { name: 'Camión pesado',  color: '#fbbf24', width: 56, height: 15, speedFactor: 0.4 },
 };
-const CATEGORY_WEIGHTS = { C1: 0.60, C2: 0.15, C3: 0.15, C4: 0.05, C5: 0.05 };
+
+// Distribución realista para carreteras nacionales de Colombia
+// Motos ~30% del tráfico total pero NO pagan peaje (pasan por la berma/lateral)
+// C1 autos ~42%, C2 buses ~8%, C3 camiones 2E ~12%, C4 camiones 3E ~5%, C5 pesados ~3%
+const CATEGORY_WEIGHTS = { M: 0.30, C1: 0.42, C2: 0.08, C3: 0.12, C4: 0.05, C5: 0.03 };
 
 function pickCategory() {
   const r = Math.random();
@@ -248,21 +253,40 @@ export default function TollCanvas({
     const vehicles = vehiclesRef.current;
     for (const v of vehicles) {
       const cat = VEHICLE_CATEGORIES[v.category];
-      const cy = laneY(v.lane, roadTop, roadBot);
+      if (!cat) continue;
+      const cy = v.isMoto ? v.motoY : laneY(v.lane, roadTop, roadBot);
       const vw = isMini ? cat.width * 0.65 : cat.width;
       const vh = isMini ? cat.height * 0.65 : cat.height;
 
-      ctx.fillStyle = cat.color;
-      ctx.beginPath();
-      ctx.roundRect(v.x - vw / 2, cy - vh / 2, vw, vh, 2);
-      ctx.fill();
-
-      if (!isMini && v.state !== 'at-booth' && v.state !== 'queued') {
-        ctx.fillStyle = 'rgba(255, 255, 200, 0.6)';
+      if (cat.isMoto) {
+        // Motorcycle — small diamond/oval shape on berma
+        ctx.fillStyle = cat.color;
+        ctx.globalAlpha = 0.85;
         ctx.beginPath();
-        ctx.arc(v.x + vw / 2 + 2, cy - 2, 1.5, 0, Math.PI * 2);
-        ctx.arc(v.x + vw / 2 + 2, cy + 2, 1.5, 0, Math.PI * 2);
+        ctx.ellipse(v.x, cy, vw / 2, vh / 2, 0, 0, Math.PI * 2);
         ctx.fill();
+        // Single headlight
+        if (v.state === 'approaching' || v.state === 'departing') {
+          ctx.fillStyle = 'rgba(255, 255, 200, 0.7)';
+          ctx.beginPath();
+          ctx.arc(v.x + vw / 2, cy, 1, 0, Math.PI * 2);
+          ctx.fill();
+        }
+        ctx.globalAlpha = 1;
+      } else {
+        // Regular vehicles
+        ctx.fillStyle = cat.color;
+        ctx.beginPath();
+        ctx.roundRect(v.x - vw / 2, cy - vh / 2, vw, vh, 2);
+        ctx.fill();
+
+        if (!isMini && v.state !== 'at-booth' && v.state !== 'queued') {
+          ctx.fillStyle = 'rgba(255, 255, 200, 0.6)';
+          ctx.beginPath();
+          ctx.arc(v.x + vw / 2 + 2, cy - 2, 1.5, 0, Math.PI * 2);
+          ctx.arc(v.x + vw / 2 + 2, cy + 2, 1.5, 0, Math.PI * 2);
+          ctx.fill();
+        }
       }
     }
 
@@ -334,18 +358,36 @@ export default function TollCanvas({
       const flowRate = (currentMetrics.vehiclesHour || 300) / 3600;
       const spawnRate = flowRate * dt * activeLanes.length * (isMini ? 0.5 : 0.8);
       if (Math.random() < spawnRate && vehicles.length < MAX_VEHICLES) {
-        const laneIdx = activeLanes[Math.floor(Math.random() * activeLanes.length)];
         const cat = pickCategory();
         const catDef = VEHICLE_CATEGORIES[cat];
-        vehicles.push({
-          x: -catDef.width,
-          lane: laneIdx,
-          category: cat,
-          speed: (40 + Math.random() * 40) * catDef.speedFactor,
-          state: 'approaching',
-          waitTimer: 0,
-          passedCount: false,
-        });
+
+        if (catDef.isMoto) {
+          // Motos pasan solo por la berma inferior (lateral de C4) — no pagan peaje
+          const motoY = roadBot + (isMini ? 4 : 8) + Math.random() * (isMini ? 3 : 5);
+          vehicles.push({
+            x: -catDef.width,
+            lane: -1,
+            category: cat,
+            speed: (55 + Math.random() * 50) * catDef.speedFactor,
+            state: 'departing', // motos go straight through, never stop
+            waitTimer: 0,
+            passedCount: false,
+            isMoto: true,
+            motoY,
+          });
+        } else {
+          const laneIdx = activeLanes[Math.floor(Math.random() * activeLanes.length)];
+          vehicles.push({
+            x: -catDef.width,
+            lane: laneIdx,
+            category: cat,
+            speed: (40 + Math.random() * 40) * catDef.speedFactor,
+            state: 'approaching',
+            waitTimer: 0,
+            passedCount: false,
+            isMoto: false,
+          });
+        }
       }
     }
 
@@ -353,6 +395,15 @@ export default function TollCanvas({
     for (let i = vehicles.length - 1; i >= 0; i--) {
       const v = vehicles[i];
       const catDef = VEHICLE_CATEGORIES[v.category];
+      if (!catDef) { vehicles.splice(i, 1); continue; }
+
+      // Motos just travel straight through on the berma
+      if (v.isMoto) {
+        v.x += v.speed * dt;
+        if (v.x > w + 60) vehicles.splice(i, 1);
+        continue;
+      }
+
       const lane = currentLanes?.[v.lane];
       const boothX = gantryX - BOOTH_W / 2;
 

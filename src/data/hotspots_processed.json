@@ -1,0 +1,2467 @@
+{
+  "generado": "2026-03-21T00:37:59.982633",
+  "totalRegistros": 204721,
+  "totalCorredores": 7,
+  "totalHotspots": 105,
+  "resumenPorCorredor": {
+    "C1": {
+      "corridorId": "C1",
+      "nombre": "Medellín–Honda–Bogotá",
+      "totalIncidentes": 43529,
+      "muertos": 0,
+      "lesionados": 20723,
+      "iraPromedio": 4.4,
+      "iraTotal": 191597.84,
+      "pctSemSanta": 18.1,
+      "vehiculoDominante": "MOTOCICLETA",
+      "horaCritica": "18:00 - 23:59",
+      "hipotesisPrincipal": "-"
+    },
+    "C2": {
+      "corridorId": "C2",
+      "nombre": "Popayán–Cali–Cartago",
+      "totalIncidentes": 29167,
+      "muertos": 0,
+      "lesionados": 14880,
+      "iraPromedio": 4.65,
+      "iraTotal": 135481.5,
+      "pctSemSanta": 17.2,
+      "vehiculoDominante": "MOTOCICLETA",
+      "horaCritica": "00:00 - 05:59",
+      "hipotesisPrincipal": "-"
+    },
+    "C3": {
+      "corridorId": "C3",
+      "nombre": "Bogotá–Girardot",
+      "totalIncidentes": 6610,
+      "muertos": 0,
+      "lesionados": 3262,
+      "iraPromedio": 4.42,
+      "iraTotal": 29183.4,
+      "pctSemSanta": 16.3,
+      "vehiculoDominante": "MOTOCICLETA",
+      "horaCritica": "18:00 - 23:59",
+      "hipotesisPrincipal": "-"
+    },
+    "C4": {
+      "corridorId": "C4",
+      "nombre": "Ibagué–La Línea–Cajamarca",
+      "totalIncidentes": 7119,
+      "muertos": 0,
+      "lesionados": 3698,
+      "iraPromedio": 4.12,
+      "iraTotal": 29321.74,
+      "pctSemSanta": 17.6,
+      "vehiculoDominante": "MOTOCICLETA",
+      "horaCritica": "06:00 - 11:59",
+      "hipotesisPrincipal": "-"
+    },
+    "C5": {
+      "corridorId": "C5",
+      "nombre": "Bogotá–Villavicencio",
+      "totalIncidentes": 13157,
+      "muertos": 0,
+      "lesionados": 6548,
+      "iraPromedio": 4.45,
+      "iraTotal": 58506.55,
+      "pctSemSanta": 16.9,
+      "vehiculoDominante": "MOTOCICLETA",
+      "horaCritica": "06:00 - 11:59",
+      "hipotesisPrincipal": "-"
+    },
+    "C6": {
+      "corridorId": "C6",
+      "nombre": "Bogotá–Tunja",
+      "totalIncidentes": 7317,
+      "muertos": 0,
+      "lesionados": 3627,
+      "iraPromedio": 4.52,
+      "iraTotal": 33037.86,
+      "pctSemSanta": 17.5,
+      "vehiculoDominante": "MOTOCICLETA",
+      "horaCritica": "18:00 - 23:59",
+      "hipotesisPrincipal": "-"
+    },
+    "C7": {
+      "corridorId": "C7",
+      "nombre": "Santa Marta–Barranquilla",
+      "totalIncidentes": 10752,
+      "muertos": 0,
+      "lesionados": 5165,
+      "iraPromedio": 4.45,
+      "iraTotal": 47826.2,
+      "pctSemSanta": 18.4,
+      "vehiculoDominante": "MOTOCICLETA",
+      "horaCritica": "18:00 - 23:59",
+      "hipotesisPrincipal": "-"
+    }
+  },
+  "hotspots": [
+    {
+      "id": "C1-HS-13",
+      "corridorId": "C1",
+      "lat": 6.005018,
+      "lng": -75.392095,
+      "totalIncidentes": 2,
+      "iraScore": 100,
+      "severidadMax": "GRAVE",
+      "hipotesisPrincipal": "SIN DATOS",
+      "vehiculoPrincipal": "MOTOCICLETA",
+      "horaCritica": "00:00 - 05:59",
+      "muertos": 0,
+      "lesionados": 1,
+      "meses": [
+        "mar"
+      ],
+      "años": [
+        "2024"
+      ],
+      "factorSemSanta": 100.0,
+      "radioMetros": 500
+    },
+    {
+      "id": "C1-HS-35",
+      "corridorId": "C1",
+      "lat": 6.04737,
+      "lng": -75.395803,
+      "totalIncidentes": 2,
+      "iraScore": 100,
+      "severidadMax": "GRAVE",
+      "hipotesisPrincipal": "SIN DATOS",
+      "vehiculoPrincipal": "MOTOCICLETA",
+      "horaCritica": "00:00 - 05:59",
+      "muertos": 0,
+      "lesionados": 1,
+      "meses": [
+        "mar"
+      ],
+      "años": [
+        "2024"
+      ],
+      "factorSemSanta": 100.0,
+      "radioMetros": 500
+    },
+    {
+      "id": "C1-HS-57",
+      "corridorId": "C1",
+      "lat": 5.196245,
+      "lng": -74.945828,
+      "totalIncidentes": 3,
+      "iraScore": 100,
+      "severidadMax": "GRAVE",
+      "hipotesisPrincipal": "SIN DATOS",
+      "vehiculoPrincipal": "CAMION",
+      "horaCritica": "00:00 - 05:59",
+      "muertos": 0,
+      "lesionados": 2,
+      "meses": [
+        "abr"
+      ],
+      "años": [
+        "2023"
+      ],
+      "factorSemSanta": 100.0,
+      "radioMetros": 500
+    },
+    {
+      "id": "C1-HS-58",
+      "corridorId": "C1",
+      "lat": 6.510064,
+      "lng": -74.770994,
+      "totalIncidentes": 2,
+      "iraScore": 100,
+      "severidadMax": "GRAVE",
+      "hipotesisPrincipal": "SIN DATOS",
+      "vehiculoPrincipal": "CAMION",
+      "horaCritica": "00:00 - 05:59",
+      "muertos": 0,
+      "lesionados": 1,
+      "meses": [
+        "abr"
+      ],
+      "años": [
+        "2024"
+      ],
+      "factorSemSanta": 100.0,
+      "radioMetros": 500
+    },
+    {
+      "id": "C1-HS-59",
+      "corridorId": "C1",
+      "lat": 5.384329,
+      "lng": -75.613822,
+      "totalIncidentes": 2,
+      "iraScore": 100,
+      "severidadMax": "GRAVE",
+      "hipotesisPrincipal": "SIN DATOS",
+      "vehiculoPrincipal": "CAMION",
+      "horaCritica": "00:00 - 05:59",
+      "muertos": 0,
+      "lesionados": 1,
+      "meses": [
+        "mar"
+      ],
+      "años": [
+        "2023"
+      ],
+      "factorSemSanta": 100.0,
+      "radioMetros": 500
+    },
+    {
+      "id": "C1-HS-76",
+      "corridorId": "C1",
+      "lat": 5.684898,
+      "lng": -75.605038,
+      "totalIncidentes": 3,
+      "iraScore": 100,
+      "severidadMax": "GRAVE",
+      "hipotesisPrincipal": "SIN DATOS",
+      "vehiculoPrincipal": "MOTOCICLETA",
+      "horaCritica": "18:00 - 23:59",
+      "muertos": 0,
+      "lesionados": 2,
+      "meses": [
+        "mar"
+      ],
+      "años": [
+        "2024"
+      ],
+      "factorSemSanta": 100.0,
+      "radioMetros": 500
+    },
+    {
+      "id": "C1-HS-123",
+      "corridorId": "C1",
+      "lat": 6.176773,
+      "lng": -75.353522,
+      "totalIncidentes": 3,
+      "iraScore": 100,
+      "severidadMax": "GRAVE",
+      "hipotesisPrincipal": "SIN DATOS",
+      "vehiculoPrincipal": "MOTOCICLETA",
+      "horaCritica": "18:00 - 23:59",
+      "muertos": 0,
+      "lesionados": 2,
+      "meses": [
+        "abr"
+      ],
+      "años": [
+        "2023"
+      ],
+      "factorSemSanta": 100.0,
+      "radioMetros": 500
+    },
+    {
+      "id": "C1-HS-492",
+      "corridorId": "C1",
+      "lat": 5.420378,
+      "lng": -74.990695,
+      "totalIncidentes": 4,
+      "iraScore": 100,
+      "severidadMax": "GRAVE",
+      "hipotesisPrincipal": "SIN DATOS",
+      "vehiculoPrincipal": "SIN DATOS",
+      "horaCritica": "00:00 - 05:59",
+      "muertos": 0,
+      "lesionados": 3,
+      "meses": [
+        "mar"
+      ],
+      "años": [
+        "2023"
+      ],
+      "factorSemSanta": 100.0,
+      "radioMetros": 500
+    },
+    {
+      "id": "C1-HS-192",
+      "corridorId": "C1",
+      "lat": 5.035046,
+      "lng": -75.597973,
+      "totalIncidentes": 3,
+      "iraScore": 99,
+      "severidadMax": "GRAVE",
+      "hipotesisPrincipal": "SIN DATOS",
+      "vehiculoPrincipal": "MOTOCICLETA",
+      "horaCritica": "00:00 - 05:59",
+      "muertos": 0,
+      "lesionados": 2,
+      "meses": [
+        "sep"
+      ],
+      "años": [
+        "2023"
+      ],
+      "factorSemSanta": 0.0,
+      "radioMetros": 500
+    },
+    {
+      "id": "C1-HS-302",
+      "corridorId": "C1",
+      "lat": 5.340513,
+      "lng": -75.628839,
+      "totalIncidentes": 3,
+      "iraScore": 99,
+      "severidadMax": "GRAVE",
+      "hipotesisPrincipal": "SIN DATOS",
+      "vehiculoPrincipal": "MOTOCICLETA",
+      "horaCritica": "00:00 - 05:59",
+      "muertos": 0,
+      "lesionados": 2,
+      "meses": [
+        "dic"
+      ],
+      "años": [
+        "2024"
+      ],
+      "factorSemSanta": 0.0,
+      "radioMetros": 500
+    },
+    {
+      "id": "C1-HS-317",
+      "corridorId": "C1",
+      "lat": 5.013011,
+      "lng": -74.541254,
+      "totalIncidentes": 3,
+      "iraScore": 99,
+      "severidadMax": "GRAVE",
+      "hipotesisPrincipal": "SIN DATOS",
+      "vehiculoPrincipal": "MOTOCICLETA",
+      "horaCritica": "00:00 - 05:59",
+      "muertos": 0,
+      "lesionados": 2,
+      "meses": [
+        "ago"
+      ],
+      "años": [
+        "2023"
+      ],
+      "factorSemSanta": 0.0,
+      "radioMetros": 500
+    },
+    {
+      "id": "C1-HS-348",
+      "corridorId": "C1",
+      "lat": 4.923513,
+      "lng": -75.623825,
+      "totalIncidentes": 3,
+      "iraScore": 99,
+      "severidadMax": "GRAVE",
+      "hipotesisPrincipal": "SIN DATOS",
+      "vehiculoPrincipal": "MOTOCICLETA",
+      "horaCritica": "00:00 - 05:59",
+      "muertos": 0,
+      "lesionados": 2,
+      "meses": [
+        "oct"
+      ],
+      "años": [
+        "2023"
+      ],
+      "factorSemSanta": 0.0,
+      "radioMetros": 500
+    },
+    {
+      "id": "C1-HS-350",
+      "corridorId": "C1",
+      "lat": 5.276215,
+      "lng": -74.737193,
+      "totalIncidentes": 3,
+      "iraScore": 99,
+      "severidadMax": "GRAVE",
+      "hipotesisPrincipal": "SIN DATOS",
+      "vehiculoPrincipal": "MOTOCICLETA",
+      "horaCritica": "00:00 - 05:59",
+      "muertos": 0,
+      "lesionados": 2,
+      "meses": [
+        "ene"
+      ],
+      "años": [
+        "2023"
+      ],
+      "factorSemSanta": 0.0,
+      "radioMetros": 500
+    },
+    {
+      "id": "C1-HS-257",
+      "corridorId": "C1",
+      "lat": 6.465211,
+      "lng": -75.372436,
+      "totalIncidentes": 7,
+      "iraScore": 94,
+      "severidadMax": "GRAVE",
+      "hipotesisPrincipal": "SIN DATOS",
+      "vehiculoPrincipal": "MOTOCICLETA",
+      "horaCritica": "00:00 - 05:59",
+      "muertos": 0,
+      "lesionados": 5,
+      "meses": [
+        "abr",
+        "nov"
+      ],
+      "años": [
+        "2024"
+      ],
+      "factorSemSanta": 42.9,
+      "radioMetros": 500
+    },
+    {
+      "id": "C1-HS-558",
+      "corridorId": "C1",
+      "lat": 4.850615,
+      "lng": -74.300136,
+      "totalIncidentes": 19,
+      "iraScore": 94,
+      "severidadMax": "GRAVE",
+      "hipotesisPrincipal": "SIN DATOS",
+      "vehiculoPrincipal": "MOTOCICLETA",
+      "horaCritica": "18:00 - 23:59",
+      "muertos": 0,
+      "lesionados": 17,
+      "meses": [
+        "mar"
+      ],
+      "años": [
+        "2023"
+      ],
+      "factorSemSanta": 100.0,
+      "radioMetros": 500
+    },
+    {
+      "id": "C2-HS-1",
+      "corridorId": "C2",
+      "lat": 3.789063,
+      "lng": -76.393521,
+      "totalIncidentes": 6,
+      "iraScore": 100,
+      "severidadMax": "GRAVE",
+      "hipotesisPrincipal": "SIN DATOS",
+      "vehiculoPrincipal": "MOTOCICLETA",
+      "horaCritica": "00:00 - 05:59",
+      "muertos": 0,
+      "lesionados": 3,
+      "meses": [
+        "abr",
+        "nov"
+      ],
+      "años": [
+        "2023",
+        "2024"
+      ],
+      "factorSemSanta": 50.0,
+      "radioMetros": 500
+    },
+    {
+      "id": "C2-HS-14",
+      "corridorId": "C2",
+      "lat": 3.771014,
+      "lng": -76.412256,
+      "totalIncidentes": 2,
+      "iraScore": 100,
+      "severidadMax": "GRAVE",
+      "hipotesisPrincipal": "SIN DATOS",
+      "vehiculoPrincipal": "MOTOCICLETA",
+      "horaCritica": "00:00 - 05:59",
+      "muertos": 0,
+      "lesionados": 1,
+      "meses": [
+        "abr"
+      ],
+      "años": [
+        "2023"
+      ],
+      "factorSemSanta": 100.0,
+      "radioMetros": 500
+    },
+    {
+      "id": "C2-HS-35",
+      "corridorId": "C2",
+      "lat": 3.875581,
+      "lng": -76.884355,
+      "totalIncidentes": 3,
+      "iraScore": 100,
+      "severidadMax": "GRAVE",
+      "hipotesisPrincipal": "SIN DATOS",
+      "vehiculoPrincipal": "CAMION",
+      "horaCritica": "00:00 - 05:59",
+      "muertos": 0,
+      "lesionados": 2,
+      "meses": [
+        "mar"
+      ],
+      "años": [
+        "2024"
+      ],
+      "factorSemSanta": 100.0,
+      "radioMetros": 500
+    },
+    {
+      "id": "C2-HS-66",
+      "corridorId": "C2",
+      "lat": 2.412508,
+      "lng": -75.864558,
+      "totalIncidentes": 3,
+      "iraScore": 100,
+      "severidadMax": "GRAVE",
+      "hipotesisPrincipal": "SIN DATOS",
+      "vehiculoPrincipal": "MOTOCICLETA",
+      "horaCritica": "18:00 - 23:59",
+      "muertos": 0,
+      "lesionados": 2,
+      "meses": [
+        "mar"
+      ],
+      "años": [
+        "2023"
+      ],
+      "factorSemSanta": 100.0,
+      "radioMetros": 500
+    },
+    {
+      "id": "C2-HS-191",
+      "corridorId": "C2",
+      "lat": 3.892921,
+      "lng": -76.333249,
+      "totalIncidentes": 4,
+      "iraScore": 100,
+      "severidadMax": "GRAVE",
+      "hipotesisPrincipal": "SIN DATOS",
+      "vehiculoPrincipal": "MOTOCICLETA",
+      "horaCritica": "00:00 - 05:59",
+      "muertos": 0,
+      "lesionados": 3,
+      "meses": [
+        "jul"
+      ],
+      "años": [
+        "2023"
+      ],
+      "factorSemSanta": 0.0,
+      "radioMetros": 500
+    },
+    {
+      "id": "C2-HS-249",
+      "corridorId": "C2",
+      "lat": 4.736539,
+      "lng": -75.901269,
+      "totalIncidentes": 5,
+      "iraScore": 100,
+      "severidadMax": "GRAVE",
+      "hipotesisPrincipal": "SIN DATOS",
+      "vehiculoPrincipal": "SIN DATOS",
+      "horaCritica": "00:00 - 05:59",
+      "muertos": 0,
+      "lesionados": 4,
+      "meses": [
+        "abr"
+      ],
+      "años": [
+        "2023"
+      ],
+      "factorSemSanta": 100.0,
+      "radioMetros": 500
+    },
+    {
+      "id": "C2-HS-288",
+      "corridorId": "C2",
+      "lat": 2.498922,
+      "lng": -76.452135,
+      "totalIncidentes": 4,
+      "iraScore": 100,
+      "severidadMax": "GRAVE",
+      "hipotesisPrincipal": "SIN DATOS",
+      "vehiculoPrincipal": "SIN DATOS",
+      "horaCritica": "00:00 - 05:59",
+      "muertos": 0,
+      "lesionados": 3,
+      "meses": [
+        "mar"
+      ],
+      "años": [
+        "2023"
+      ],
+      "factorSemSanta": 100.0,
+      "radioMetros": 500
+    },
+    {
+      "id": "C2-HS-183",
+      "corridorId": "C2",
+      "lat": 4.352309,
+      "lng": -76.032536,
+      "totalIncidentes": 3,
+      "iraScore": 99,
+      "severidadMax": "GRAVE",
+      "hipotesisPrincipal": "SIN DATOS",
+      "vehiculoPrincipal": "MOTOCICLETA",
+      "horaCritica": "00:00 - 05:59",
+      "muertos": 0,
+      "lesionados": 2,
+      "meses": [
+        "dic"
+      ],
+      "años": [
+        "2024"
+      ],
+      "factorSemSanta": 0.0,
+      "radioMetros": 500
+    },
+    {
+      "id": "C2-HS-338",
+      "corridorId": "C2",
+      "lat": 3.384577,
+      "lng": -76.35328,
+      "totalIncidentes": 24,
+      "iraScore": 98,
+      "severidadMax": "GRAVE",
+      "hipotesisPrincipal": "SIN DATOS",
+      "vehiculoPrincipal": "SIN DATOS",
+      "horaCritica": "00:00 - 05:59",
+      "muertos": 0,
+      "lesionados": 19,
+      "meses": [
+        "abr",
+        "mar",
+        "ene",
+        "ago"
+      ],
+      "años": [
+        "2023",
+        "2024"
+      ],
+      "factorSemSanta": 83.3,
+      "radioMetros": 500
+    },
+    {
+      "id": "C2-HS-346",
+      "corridorId": "C2",
+      "lat": 3.484745,
+      "lng": -76.602329,
+      "totalIncidentes": 18,
+      "iraScore": 98,
+      "severidadMax": "GRAVE",
+      "hipotesisPrincipal": "SIN DATOS",
+      "vehiculoPrincipal": "SIN DATOS",
+      "horaCritica": "00:00 - 05:59",
+      "muertos": 0,
+      "lesionados": 14,
+      "meses": [
+        "abr",
+        "ago",
+        "jun"
+      ],
+      "años": [
+        "2024"
+      ],
+      "factorSemSanta": 77.8,
+      "radioMetros": 500
+    },
+    {
+      "id": "C2-HS-246",
+      "corridorId": "C2",
+      "lat": 3.85096,
+      "lng": -76.564348,
+      "totalIncidentes": 3,
+      "iraScore": 96,
+      "severidadMax": "GRAVE",
+      "hipotesisPrincipal": "SIN DATOS",
+      "vehiculoPrincipal": "AUTOMOVIL",
+      "horaCritica": "00:00 - 05:59",
+      "muertos": 0,
+      "lesionados": 2,
+      "meses": [
+        "abr"
+      ],
+      "años": [
+        "2023"
+      ],
+      "factorSemSanta": 100.0,
+      "radioMetros": 500
+    },
+    {
+      "id": "C2-HS-269",
+      "corridorId": "C2",
+      "lat": 3.402519,
+      "lng": -76.309443,
+      "totalIncidentes": 3,
+      "iraScore": 96,
+      "severidadMax": "GRAVE",
+      "hipotesisPrincipal": "SIN DATOS",
+      "vehiculoPrincipal": "SIN DATOS",
+      "horaCritica": "00:00 - 05:59",
+      "muertos": 0,
+      "lesionados": 2,
+      "meses": [
+        "mar"
+      ],
+      "años": [
+        "2024"
+      ],
+      "factorSemSanta": 100.0,
+      "radioMetros": 500
+    },
+    {
+      "id": "C2-HS-300",
+      "corridorId": "C2",
+      "lat": 2.679588,
+      "lng": -76.529954,
+      "totalIncidentes": 3,
+      "iraScore": 96,
+      "severidadMax": "GRAVE",
+      "hipotesisPrincipal": "SIN DATOS",
+      "vehiculoPrincipal": "SIN DATOS",
+      "horaCritica": "00:00 - 05:59",
+      "muertos": 0,
+      "lesionados": 2,
+      "meses": [
+        "mar"
+      ],
+      "años": [
+        "2023"
+      ],
+      "factorSemSanta": 100.0,
+      "radioMetros": 500
+    },
+    {
+      "id": "C2-HS-312",
+      "corridorId": "C2",
+      "lat": 3.34599,
+      "lng": -76.550875,
+      "totalIncidentes": 3,
+      "iraScore": 96,
+      "severidadMax": "GRAVE",
+      "hipotesisPrincipal": "SIN DATOS",
+      "vehiculoPrincipal": "SIN DATOS",
+      "horaCritica": "00:00 - 05:59",
+      "muertos": 0,
+      "lesionados": 2,
+      "meses": [
+        "mar"
+      ],
+      "años": [
+        "2023"
+      ],
+      "factorSemSanta": 100.0,
+      "radioMetros": 500
+    },
+    {
+      "id": "C2-HS-59",
+      "corridorId": "C2",
+      "lat": 3.783355,
+      "lng": -76.760495,
+      "totalIncidentes": 6,
+      "iraScore": 94,
+      "severidadMax": "GRAVE",
+      "hipotesisPrincipal": "SIN DATOS",
+      "vehiculoPrincipal": "MOTOCICLETA",
+      "horaCritica": "18:00 - 23:59",
+      "muertos": 0,
+      "lesionados": 4,
+      "meses": [
+        "mar",
+        "jun"
+      ],
+      "años": [
+        "2024"
+      ],
+      "factorSemSanta": 50.0,
+      "radioMetros": 500
+    },
+    {
+      "id": "C3-HS-6",
+      "corridorId": "C3",
+      "lat": 4.455869,
+      "lng": -74.380478,
+      "totalIncidentes": 3,
+      "iraScore": 100,
+      "severidadMax": "GRAVE",
+      "hipotesisPrincipal": "SIN DATOS",
+      "vehiculoPrincipal": "MOTOCICLETA",
+      "horaCritica": "00:00 - 05:59",
+      "muertos": 0,
+      "lesionados": 2,
+      "meses": [
+        "mar"
+      ],
+      "años": [
+        "2024"
+      ],
+      "factorSemSanta": 100.0,
+      "radioMetros": 500
+    },
+    {
+      "id": "C3-HS-9",
+      "corridorId": "C3",
+      "lat": 4.253903,
+      "lng": -74.829514,
+      "totalIncidentes": 10,
+      "iraScore": 100,
+      "severidadMax": "GRAVE",
+      "hipotesisPrincipal": "SIN DATOS",
+      "vehiculoPrincipal": "MOTOCICLETA",
+      "horaCritica": "00:00 - 05:59",
+      "muertos": 0,
+      "lesionados": 6,
+      "meses": [
+        "abr",
+        "ene",
+        "jul"
+      ],
+      "años": [
+        "2023",
+        "2024"
+      ],
+      "factorSemSanta": 50.0,
+      "radioMetros": 500
+    },
+    {
+      "id": "C3-HS-28",
+      "corridorId": "C3",
+      "lat": 4.263626,
+      "lng": -74.517973,
+      "totalIncidentes": 3,
+      "iraScore": 100,
+      "severidadMax": "GRAVE",
+      "hipotesisPrincipal": "SIN DATOS",
+      "vehiculoPrincipal": "MOTOCICLETA",
+      "horaCritica": "18:00 - 23:59",
+      "muertos": 0,
+      "lesionados": 2,
+      "meses": [
+        "mar"
+      ],
+      "años": [
+        "2024"
+      ],
+      "factorSemSanta": 100.0,
+      "radioMetros": 500
+    },
+    {
+      "id": "C3-HS-59",
+      "corridorId": "C3",
+      "lat": 4.444377,
+      "lng": -74.670426,
+      "totalIncidentes": 4,
+      "iraScore": 100,
+      "severidadMax": "GRAVE",
+      "hipotesisPrincipal": "SIN DATOS",
+      "vehiculoPrincipal": "MOTOCICLETA",
+      "horaCritica": "00:00 - 05:59",
+      "muertos": 0,
+      "lesionados": 3,
+      "meses": [
+        "dic"
+      ],
+      "años": [
+        "2024"
+      ],
+      "factorSemSanta": 0.0,
+      "radioMetros": 500
+    },
+    {
+      "id": "C3-HS-4",
+      "corridorId": "C3",
+      "lat": 4.192201,
+      "lng": -74.860974,
+      "totalIncidentes": 8,
+      "iraScore": 95,
+      "severidadMax": "GRAVE",
+      "hipotesisPrincipal": "SIN DATOS",
+      "vehiculoPrincipal": "MOTOCICLETA",
+      "horaCritica": "00:00 - 05:59",
+      "muertos": 0,
+      "lesionados": 5,
+      "meses": [
+        "mar",
+        "dic",
+        "feb"
+      ],
+      "años": [
+        "2023",
+        "2024"
+      ],
+      "factorSemSanta": 25.0,
+      "radioMetros": 500
+    },
+    {
+      "id": "C3-HS-63",
+      "corridorId": "C3",
+      "lat": 4.684628,
+      "lng": -74.936787,
+      "totalIncidentes": 5,
+      "iraScore": 92,
+      "severidadMax": "GRAVE",
+      "hipotesisPrincipal": "SIN DATOS",
+      "vehiculoPrincipal": "MOTOCICLETA",
+      "horaCritica": "00:00 - 05:59",
+      "muertos": 0,
+      "lesionados": 3,
+      "meses": [
+        "nov"
+      ],
+      "años": [
+        "2024"
+      ],
+      "factorSemSanta": 0.0,
+      "radioMetros": 500
+    },
+    {
+      "id": "C3-HS-136",
+      "corridorId": "C3",
+      "lat": 4.215789,
+      "lng": -74.945973,
+      "totalIncidentes": 5,
+      "iraScore": 88,
+      "severidadMax": "GRAVE",
+      "hipotesisPrincipal": "SIN DATOS",
+      "vehiculoPrincipal": "MOTOCICLETA",
+      "horaCritica": "18:00 - 23:59",
+      "muertos": 0,
+      "lesionados": 4,
+      "meses": [
+        "may"
+      ],
+      "años": [
+        "2023"
+      ],
+      "factorSemSanta": 0.0,
+      "radioMetros": 500
+    },
+    {
+      "id": "C3-HS-1",
+      "corridorId": "C3",
+      "lat": 4.166279,
+      "lng": -74.890193,
+      "totalIncidentes": 7,
+      "iraScore": 87,
+      "severidadMax": "GRAVE",
+      "hipotesisPrincipal": "SIN DATOS",
+      "vehiculoPrincipal": "MOTOCICLETA",
+      "horaCritica": "06:00 - 11:59",
+      "muertos": 0,
+      "lesionados": 5,
+      "meses": [
+        "abr",
+        "nov"
+      ],
+      "años": [
+        "2023",
+        "2024"
+      ],
+      "factorSemSanta": 42.9,
+      "radioMetros": 500
+    },
+    {
+      "id": "C3-HS-35",
+      "corridorId": "C3",
+      "lat": 4.494607,
+      "lng": -74.370687,
+      "totalIncidentes": 2,
+      "iraScore": 81,
+      "severidadMax": "GRAVE",
+      "hipotesisPrincipal": "SIN DATOS",
+      "vehiculoPrincipal": "MOTOCICLETA",
+      "horaCritica": "00:00 - 05:59",
+      "muertos": 0,
+      "lesionados": 1,
+      "meses": [
+        "ago"
+      ],
+      "años": [
+        "2023"
+      ],
+      "factorSemSanta": 0.0,
+      "radioMetros": 500
+    },
+    {
+      "id": "C3-HS-36",
+      "corridorId": "C3",
+      "lat": 4.65005,
+      "lng": -74.51668,
+      "totalIncidentes": 2,
+      "iraScore": 81,
+      "severidadMax": "GRAVE",
+      "hipotesisPrincipal": "SIN DATOS",
+      "vehiculoPrincipal": "MOTOCICLETA",
+      "horaCritica": "00:00 - 05:59",
+      "muertos": 0,
+      "lesionados": 1,
+      "meses": [
+        "oct"
+      ],
+      "años": [
+        "2024"
+      ],
+      "factorSemSanta": 0.0,
+      "radioMetros": 500
+    },
+    {
+      "id": "C3-HS-40",
+      "corridorId": "C3",
+      "lat": 4.513328,
+      "lng": -74.35974,
+      "totalIncidentes": 26,
+      "iraScore": 77,
+      "severidadMax": "GRAVE",
+      "hipotesisPrincipal": "SIN DATOS",
+      "vehiculoPrincipal": "MOTOCICLETA",
+      "horaCritica": "00:00 - 05:59",
+      "muertos": 0,
+      "lesionados": 18,
+      "meses": [
+        "oct",
+        "mar",
+        "sep",
+        "nov",
+        "jun"
+      ],
+      "años": [
+        "2023",
+        "2024"
+      ],
+      "factorSemSanta": 7.7,
+      "radioMetros": 500
+    },
+    {
+      "id": "C3-HS-145",
+      "corridorId": "C3",
+      "lat": 4.222038,
+      "lng": -74.939987,
+      "totalIncidentes": 3,
+      "iraScore": 77,
+      "severidadMax": "GRAVE",
+      "hipotesisPrincipal": "SIN DATOS",
+      "vehiculoPrincipal": "MOTOCICLETA",
+      "horaCritica": "18:00 - 23:59",
+      "muertos": 0,
+      "lesionados": 2,
+      "meses": [
+        "jul"
+      ],
+      "años": [
+        "2023"
+      ],
+      "factorSemSanta": 0.0,
+      "radioMetros": 500
+    },
+    {
+      "id": "C3-HS-160",
+      "corridorId": "C3",
+      "lat": 4.25665,
+      "lng": -74.603471,
+      "totalIncidentes": 3,
+      "iraScore": 77,
+      "severidadMax": "GRAVE",
+      "hipotesisPrincipal": "SIN DATOS",
+      "vehiculoPrincipal": "MOTOCICLETA",
+      "horaCritica": "18:00 - 23:59",
+      "muertos": 0,
+      "lesionados": 2,
+      "meses": [
+        "ago"
+      ],
+      "años": [
+        "2023"
+      ],
+      "factorSemSanta": 0.0,
+      "radioMetros": 500
+    },
+    {
+      "id": "C3-HS-178",
+      "corridorId": "C3",
+      "lat": 4.40604,
+      "lng": -74.83177,
+      "totalIncidentes": 3,
+      "iraScore": 77,
+      "severidadMax": "GRAVE",
+      "hipotesisPrincipal": "SIN DATOS",
+      "vehiculoPrincipal": "MOTOCICLETA",
+      "horaCritica": "18:00 - 23:59",
+      "muertos": 0,
+      "lesionados": 2,
+      "meses": [
+        "ene"
+      ],
+      "años": [
+        "2023"
+      ],
+      "factorSemSanta": 0.0,
+      "radioMetros": 500
+    },
+    {
+      "id": "C3-HS-298",
+      "corridorId": "C3",
+      "lat": 4.271073,
+      "lng": -74.56283,
+      "totalIncidentes": 5,
+      "iraScore": 76,
+      "severidadMax": "GRAVE",
+      "hipotesisPrincipal": "SIN DATOS",
+      "vehiculoPrincipal": "AUTOMOVIL",
+      "horaCritica": "00:00 - 05:59",
+      "muertos": 0,
+      "lesionados": 4,
+      "meses": [
+        "ene"
+      ],
+      "años": [
+        "2023"
+      ],
+      "factorSemSanta": 0.0,
+      "radioMetros": 500
+    },
+    {
+      "id": "C4-HS-11",
+      "corridorId": "C4",
+      "lat": 4.478383,
+      "lng": -75.016405,
+      "totalIncidentes": 3,
+      "iraScore": 99,
+      "severidadMax": "GRAVE",
+      "hipotesisPrincipal": "SIN DATOS",
+      "vehiculoPrincipal": "MOTOCICLETA",
+      "horaCritica": "00:00 - 05:59",
+      "muertos": 0,
+      "lesionados": 2,
+      "meses": [
+        "may"
+      ],
+      "años": [
+        "2023"
+      ],
+      "factorSemSanta": 0.0,
+      "radioMetros": 500
+    },
+    {
+      "id": "C4-HS-16",
+      "corridorId": "C4",
+      "lat": 4.353709,
+      "lng": -75.289792,
+      "totalIncidentes": 3,
+      "iraScore": 96,
+      "severidadMax": "GRAVE",
+      "hipotesisPrincipal": "SIN DATOS",
+      "vehiculoPrincipal": "SIN DATOS",
+      "horaCritica": "00:00 - 05:59",
+      "muertos": 0,
+      "lesionados": 2,
+      "meses": [
+        "abr"
+      ],
+      "años": [
+        "2023"
+      ],
+      "factorSemSanta": 100.0,
+      "radioMetros": 500
+    },
+    {
+      "id": "C4-HS-57",
+      "corridorId": "C4",
+      "lat": 4.434297,
+      "lng": -75.503783,
+      "totalIncidentes": 17,
+      "iraScore": 88,
+      "severidadMax": "GRAVE",
+      "hipotesisPrincipal": "SIN DATOS",
+      "vehiculoPrincipal": "BUS",
+      "horaCritica": "00:00 - 05:59",
+      "muertos": 0,
+      "lesionados": 14,
+      "meses": [
+        "may",
+        "mar",
+        "nov"
+      ],
+      "años": [
+        "2023",
+        "2024"
+      ],
+      "factorSemSanta": 11.8,
+      "radioMetros": 500
+    },
+    {
+      "id": "C4-HS-61",
+      "corridorId": "C4",
+      "lat": 4.423382,
+      "lng": -75.20152,
+      "totalIncidentes": 5,
+      "iraScore": 88,
+      "severidadMax": "GRAVE",
+      "hipotesisPrincipal": "SIN DATOS",
+      "vehiculoPrincipal": "MOTOCICLETA",
+      "horaCritica": "18:00 - 23:59",
+      "muertos": 0,
+      "lesionados": 4,
+      "meses": [
+        "ene"
+      ],
+      "años": [
+        "2024"
+      ],
+      "factorSemSanta": 0.0,
+      "radioMetros": 500
+    },
+    {
+      "id": "C4-HS-65",
+      "corridorId": "C4",
+      "lat": 4.42105,
+      "lng": -75.239092,
+      "totalIncidentes": 5,
+      "iraScore": 88,
+      "severidadMax": "GRAVE",
+      "hipotesisPrincipal": "SIN DATOS",
+      "vehiculoPrincipal": "MOTOCICLETA",
+      "horaCritica": "18:00 - 23:59",
+      "muertos": 0,
+      "lesionados": 4,
+      "meses": [
+        "nov"
+      ],
+      "años": [
+        "2023"
+      ],
+      "factorSemSanta": 0.0,
+      "radioMetros": 500
+    },
+    {
+      "id": "C4-HS-58",
+      "corridorId": "C4",
+      "lat": 4.478589,
+      "lng": -75.564154,
+      "totalIncidentes": 4,
+      "iraScore": 86,
+      "severidadMax": "GRAVE",
+      "hipotesisPrincipal": "SIN DATOS",
+      "vehiculoPrincipal": "BUS",
+      "horaCritica": "00:00 - 05:59",
+      "muertos": 0,
+      "lesionados": 3,
+      "meses": [
+        "ago"
+      ],
+      "años": [
+        "2023"
+      ],
+      "factorSemSanta": 0.0,
+      "radioMetros": 500
+    },
+    {
+      "id": "C4-HS-59",
+      "corridorId": "C4",
+      "lat": 4.412636,
+      "lng": -75.347183,
+      "totalIncidentes": 8,
+      "iraScore": 86,
+      "severidadMax": "GRAVE",
+      "hipotesisPrincipal": "SIN DATOS",
+      "vehiculoPrincipal": "BUS",
+      "horaCritica": "00:00 - 05:59",
+      "muertos": 0,
+      "lesionados": 6,
+      "meses": [
+        "may"
+      ],
+      "años": [
+        "2024"
+      ],
+      "factorSemSanta": 0.0,
+      "radioMetros": 500
+    },
+    {
+      "id": "C4-HS-56",
+      "corridorId": "C4",
+      "lat": 4.499894,
+      "lng": -75.566933,
+      "totalIncidentes": 25,
+      "iraScore": 81,
+      "severidadMax": "GRAVE",
+      "hipotesisPrincipal": "SIN DATOS",
+      "vehiculoPrincipal": "BUS",
+      "horaCritica": "00:00 - 05:59",
+      "muertos": 0,
+      "lesionados": 20,
+      "meses": [
+        "dic",
+        "jun"
+      ],
+      "años": [
+        "2023"
+      ],
+      "factorSemSanta": 0.0,
+      "radioMetros": 500
+    },
+    {
+      "id": "C4-HS-19",
+      "corridorId": "C4",
+      "lat": 4.443593,
+      "lng": -75.263502,
+      "totalIncidentes": 2,
+      "iraScore": 78,
+      "severidadMax": "GRAVE",
+      "hipotesisPrincipal": "SIN DATOS",
+      "vehiculoPrincipal": "SIN DATOS",
+      "horaCritica": "00:00 - 05:59",
+      "muertos": 0,
+      "lesionados": 1,
+      "meses": [
+        "mar"
+      ],
+      "años": [
+        "2024"
+      ],
+      "factorSemSanta": 100.0,
+      "radioMetros": 500
+    },
+    {
+      "id": "C4-HS-63",
+      "corridorId": "C4",
+      "lat": 4.329323,
+      "lng": -75.238865,
+      "totalIncidentes": 3,
+      "iraScore": 77,
+      "severidadMax": "GRAVE",
+      "hipotesisPrincipal": "SIN DATOS",
+      "vehiculoPrincipal": "MOTOCICLETA",
+      "horaCritica": "18:00 - 23:59",
+      "muertos": 0,
+      "lesionados": 2,
+      "meses": [
+        "dic"
+      ],
+      "años": [
+        "2024"
+      ],
+      "factorSemSanta": 0.0,
+      "radioMetros": 500
+    },
+    {
+      "id": "C4-HS-69",
+      "corridorId": "C4",
+      "lat": 4.391131,
+      "lng": -75.150621,
+      "totalIncidentes": 7,
+      "iraScore": 75,
+      "severidadMax": "GRAVE",
+      "hipotesisPrincipal": "SIN DATOS",
+      "vehiculoPrincipal": "MOTOCICLETA",
+      "horaCritica": "18:00 - 23:59",
+      "muertos": 0,
+      "lesionados": 5,
+      "meses": [
+        "sep",
+        "feb"
+      ],
+      "años": [
+        "2023",
+        "2024"
+      ],
+      "factorSemSanta": 0.0,
+      "radioMetros": 500
+    },
+    {
+      "id": "C4-HS-80",
+      "corridorId": "C4",
+      "lat": 4.544124,
+      "lng": -75.642214,
+      "totalIncidentes": 3,
+      "iraScore": 74,
+      "severidadMax": "GRAVE",
+      "hipotesisPrincipal": "SIN DATOS",
+      "vehiculoPrincipal": "SIN DATOS",
+      "horaCritica": "18:00 - 23:59",
+      "muertos": 0,
+      "lesionados": 2,
+      "meses": [
+        "mar"
+      ],
+      "años": [
+        "2024"
+      ],
+      "factorSemSanta": 100.0,
+      "radioMetros": 500
+    },
+    {
+      "id": "C4-HS-91",
+      "corridorId": "C4",
+      "lat": 4.486941,
+      "lng": -75.285538,
+      "totalIncidentes": 3,
+      "iraScore": 74,
+      "severidadMax": "GRAVE",
+      "hipotesisPrincipal": "SIN DATOS",
+      "vehiculoPrincipal": "SIN DATOS",
+      "horaCritica": "18:00 - 23:59",
+      "muertos": 0,
+      "lesionados": 2,
+      "meses": [
+        "mar"
+      ],
+      "años": [
+        "2024"
+      ],
+      "factorSemSanta": 100.0,
+      "radioMetros": 500
+    },
+    {
+      "id": "C4-HS-99",
+      "corridorId": "C4",
+      "lat": 4.341001,
+      "lng": -75.196239,
+      "totalIncidentes": 3,
+      "iraScore": 74,
+      "severidadMax": "GRAVE",
+      "hipotesisPrincipal": "SIN DATOS",
+      "vehiculoPrincipal": "SIN DATOS",
+      "horaCritica": "18:00 - 23:59",
+      "muertos": 0,
+      "lesionados": 2,
+      "meses": [
+        "mar"
+      ],
+      "años": [
+        "2024"
+      ],
+      "factorSemSanta": 100.0,
+      "radioMetros": 500
+    },
+    {
+      "id": "C4-HS-55",
+      "corridorId": "C4",
+      "lat": 4.319049,
+      "lng": -75.065511,
+      "totalIncidentes": 5,
+      "iraScore": 73,
+      "severidadMax": "GRAVE",
+      "hipotesisPrincipal": "SIN DATOS",
+      "vehiculoPrincipal": "MOTOCICLETA",
+      "horaCritica": "12:00 - 17:59",
+      "muertos": 0,
+      "lesionados": 3,
+      "meses": [
+        "abr",
+        "dic"
+      ],
+      "años": [
+        "2023",
+        "2024"
+      ],
+      "factorSemSanta": 60.0,
+      "radioMetros": 500
+    },
+    {
+      "id": "C5-HS-15",
+      "corridorId": "C5",
+      "lat": 4.269446,
+      "lng": -73.521221,
+      "totalIncidentes": 2,
+      "iraScore": 100,
+      "severidadMax": "GRAVE",
+      "hipotesisPrincipal": "SIN DATOS",
+      "vehiculoPrincipal": "MOTOCICLETA",
+      "horaCritica": "00:00 - 05:59",
+      "muertos": 0,
+      "lesionados": 1,
+      "meses": [
+        "mar"
+      ],
+      "años": [
+        "2024"
+      ],
+      "factorSemSanta": 100.0,
+      "radioMetros": 500
+    },
+    {
+      "id": "C5-HS-71",
+      "corridorId": "C5",
+      "lat": 4.440491,
+      "lng": -74.026671,
+      "totalIncidentes": 6,
+      "iraScore": 97,
+      "severidadMax": "GRAVE",
+      "hipotesisPrincipal": "SIN DATOS",
+      "vehiculoPrincipal": "MOTOCICLETA",
+      "horaCritica": "00:00 - 05:59",
+      "muertos": 0,
+      "lesionados": 4,
+      "meses": [
+        "abr",
+        "dic"
+      ],
+      "años": [
+        "2023"
+      ],
+      "factorSemSanta": 50.0,
+      "radioMetros": 500
+    },
+    {
+      "id": "C5-HS-110",
+      "corridorId": "C5",
+      "lat": 4.605865,
+      "lng": -73.932521,
+      "totalIncidentes": 3,
+      "iraScore": 96,
+      "severidadMax": "GRAVE",
+      "hipotesisPrincipal": "SIN DATOS",
+      "vehiculoPrincipal": "SIN DATOS",
+      "horaCritica": "00:00 - 05:59",
+      "muertos": 0,
+      "lesionados": 2,
+      "meses": [
+        "abr"
+      ],
+      "años": [
+        "2023"
+      ],
+      "factorSemSanta": 100.0,
+      "radioMetros": 500
+    },
+    {
+      "id": "C5-HS-139",
+      "corridorId": "C5",
+      "lat": 4.064714,
+      "lng": -73.622304,
+      "totalIncidentes": 3,
+      "iraScore": 96,
+      "severidadMax": "GRAVE",
+      "hipotesisPrincipal": "SIN DATOS",
+      "vehiculoPrincipal": "SIN DATOS",
+      "horaCritica": "00:00 - 05:59",
+      "muertos": 0,
+      "lesionados": 2,
+      "meses": [
+        "mar"
+      ],
+      "años": [
+        "2023"
+      ],
+      "factorSemSanta": 100.0,
+      "radioMetros": 500
+    },
+    {
+      "id": "C5-HS-27",
+      "corridorId": "C5",
+      "lat": 4.056977,
+      "lng": -73.486288,
+      "totalIncidentes": 2,
+      "iraScore": 91,
+      "severidadMax": "GRAVE",
+      "hipotesisPrincipal": "SIN DATOS",
+      "vehiculoPrincipal": "MOTOCICLETA",
+      "horaCritica": "18:00 - 23:59",
+      "muertos": 0,
+      "lesionados": 1,
+      "meses": [
+        "abr"
+      ],
+      "años": [
+        "2024"
+      ],
+      "factorSemSanta": 100.0,
+      "radioMetros": 500
+    },
+    {
+      "id": "C5-HS-39",
+      "corridorId": "C5",
+      "lat": 4.11003,
+      "lng": -73.602563,
+      "totalIncidentes": 12,
+      "iraScore": 79,
+      "severidadMax": "GRAVE",
+      "hipotesisPrincipal": "SIN DATOS",
+      "vehiculoPrincipal": "MOTOCICLETA",
+      "horaCritica": "18:00 - 23:59",
+      "muertos": 0,
+      "lesionados": 8,
+      "meses": [
+        "abr",
+        "dic",
+        "ene"
+      ],
+      "años": [
+        "2023",
+        "2024"
+      ],
+      "factorSemSanta": 16.7,
+      "radioMetros": 500
+    },
+    {
+      "id": "C5-HS-47",
+      "corridorId": "C5",
+      "lat": 4.530308,
+      "lng": -74.091599,
+      "totalIncidentes": 6,
+      "iraScore": 78,
+      "severidadMax": "GRAVE",
+      "hipotesisPrincipal": "SIN DATOS",
+      "vehiculoPrincipal": "MOTOCICLETA",
+      "horaCritica": "18:00 - 23:59",
+      "muertos": 0,
+      "lesionados": 3,
+      "meses": [
+        "abr",
+        "ago",
+        "feb"
+      ],
+      "años": [
+        "2023"
+      ],
+      "factorSemSanta": 50.0,
+      "radioMetros": 500
+    },
+    {
+      "id": "C5-HS-146",
+      "corridorId": "C5",
+      "lat": 4.431929,
+      "lng": -74.013041,
+      "totalIncidentes": 2,
+      "iraScore": 78,
+      "severidadMax": "GRAVE",
+      "hipotesisPrincipal": "SIN DATOS",
+      "vehiculoPrincipal": "CAMIONETA",
+      "horaCritica": "00:00 - 05:59",
+      "muertos": 0,
+      "lesionados": 1,
+      "meses": [
+        "abr"
+      ],
+      "años": [
+        "2024"
+      ],
+      "factorSemSanta": 100.0,
+      "radioMetros": 500
+    },
+    {
+      "id": "C5-HS-197",
+      "corridorId": "C5",
+      "lat": 4.170945,
+      "lng": -73.620527,
+      "totalIncidentes": 3,
+      "iraScore": 77,
+      "severidadMax": "GRAVE",
+      "hipotesisPrincipal": "SIN DATOS",
+      "vehiculoPrincipal": "MOTOCICLETA",
+      "horaCritica": "18:00 - 23:59",
+      "muertos": 0,
+      "lesionados": 2,
+      "meses": [
+        "may"
+      ],
+      "años": [
+        "2024"
+      ],
+      "factorSemSanta": 0.0,
+      "radioMetros": 500
+    },
+    {
+      "id": "C5-HS-229",
+      "corridorId": "C5",
+      "lat": 4.325856,
+      "lng": -73.403204,
+      "totalIncidentes": 3,
+      "iraScore": 77,
+      "severidadMax": "GRAVE",
+      "hipotesisPrincipal": "SIN DATOS",
+      "vehiculoPrincipal": "MOTOCICLETA",
+      "horaCritica": "18:00 - 23:59",
+      "muertos": 0,
+      "lesionados": 2,
+      "meses": [
+        "jun"
+      ],
+      "años": [
+        "2024"
+      ],
+      "factorSemSanta": 0.0,
+      "radioMetros": 500
+    },
+    {
+      "id": "C5-HS-248",
+      "corridorId": "C5",
+      "lat": 4.714413,
+      "lng": -73.970268,
+      "totalIncidentes": 3,
+      "iraScore": 77,
+      "severidadMax": "GRAVE",
+      "hipotesisPrincipal": "SIN DATOS",
+      "vehiculoPrincipal": "MOTOCICLETA",
+      "horaCritica": "18:00 - 23:59",
+      "muertos": 0,
+      "lesionados": 2,
+      "meses": [
+        "jul"
+      ],
+      "años": [
+        "2024"
+      ],
+      "factorSemSanta": 0.0,
+      "radioMetros": 500
+    },
+    {
+      "id": "C5-HS-258",
+      "corridorId": "C5",
+      "lat": 4.407409,
+      "lng": -73.916815,
+      "totalIncidentes": 3,
+      "iraScore": 77,
+      "severidadMax": "GRAVE",
+      "hipotesisPrincipal": "SIN DATOS",
+      "vehiculoPrincipal": "MOTOCICLETA",
+      "horaCritica": "18:00 - 23:59",
+      "muertos": 0,
+      "lesionados": 2,
+      "meses": [
+        "oct"
+      ],
+      "años": [
+        "2023"
+      ],
+      "factorSemSanta": 0.0,
+      "radioMetros": 500
+    },
+    {
+      "id": "C5-HS-2",
+      "corridorId": "C5",
+      "lat": 4.206642,
+      "lng": -73.590834,
+      "totalIncidentes": 4,
+      "iraScore": 75,
+      "severidadMax": "GRAVE",
+      "hipotesisPrincipal": "SIN DATOS",
+      "vehiculoPrincipal": "MOTOCICLETA",
+      "horaCritica": "00:00 - 05:59",
+      "muertos": 0,
+      "lesionados": 2,
+      "meses": [
+        "jul",
+        "mar"
+      ],
+      "años": [
+        "2023"
+      ],
+      "factorSemSanta": 50.0,
+      "radioMetros": 500
+    },
+    {
+      "id": "C5-HS-202",
+      "corridorId": "C5",
+      "lat": 4.6307,
+      "lng": -74.09615,
+      "totalIncidentes": 6,
+      "iraScore": 74,
+      "severidadMax": "GRAVE",
+      "hipotesisPrincipal": "SIN DATOS",
+      "vehiculoPrincipal": "MOTOCICLETA",
+      "horaCritica": "18:00 - 23:59",
+      "muertos": 0,
+      "lesionados": 4,
+      "meses": [
+        "sep"
+      ],
+      "años": [
+        "2023",
+        "2024"
+      ],
+      "factorSemSanta": 0.0,
+      "radioMetros": 500
+    },
+    {
+      "id": "C5-HS-272",
+      "corridorId": "C5",
+      "lat": 4.057767,
+      "lng": -73.666681,
+      "totalIncidentes": 3,
+      "iraScore": 74,
+      "severidadMax": "GRAVE",
+      "hipotesisPrincipal": "SIN DATOS",
+      "vehiculoPrincipal": "SIN DATOS",
+      "horaCritica": "18:00 - 23:59",
+      "muertos": 0,
+      "lesionados": 2,
+      "meses": [
+        "abr"
+      ],
+      "años": [
+        "2024"
+      ],
+      "factorSemSanta": 100.0,
+      "radioMetros": 500
+    },
+    {
+      "id": "C6-HS-1",
+      "corridorId": "C6",
+      "lat": 4.921609,
+      "lng": -73.841397,
+      "totalIncidentes": 5,
+      "iraScore": 100,
+      "severidadMax": "GRAVE",
+      "hipotesisPrincipal": "SIN DATOS",
+      "vehiculoPrincipal": "MOTOCICLETA",
+      "horaCritica": "00:00 - 05:59",
+      "muertos": 0,
+      "lesionados": 3,
+      "meses": [
+        "abr",
+        "dic"
+      ],
+      "años": [
+        "2023",
+        "2024"
+      ],
+      "factorSemSanta": 60.0,
+      "radioMetros": 500
+    },
+    {
+      "id": "C6-HS-2",
+      "corridorId": "C6",
+      "lat": 4.752966,
+      "lng": -74.03767,
+      "totalIncidentes": 3,
+      "iraScore": 100,
+      "severidadMax": "GRAVE",
+      "hipotesisPrincipal": "SIN DATOS",
+      "vehiculoPrincipal": "MOTOCICLETA",
+      "horaCritica": "00:00 - 05:59",
+      "muertos": 0,
+      "lesionados": 2,
+      "meses": [
+        "mar"
+      ],
+      "años": [
+        "2024"
+      ],
+      "factorSemSanta": 100.0,
+      "radioMetros": 500
+    },
+    {
+      "id": "C6-HS-5",
+      "corridorId": "C6",
+      "lat": 4.849746,
+      "lng": -74.038995,
+      "totalIncidentes": 2,
+      "iraScore": 100,
+      "severidadMax": "GRAVE",
+      "hipotesisPrincipal": "SIN DATOS",
+      "vehiculoPrincipal": "MOTOCICLETA",
+      "horaCritica": "00:00 - 05:59",
+      "muertos": 0,
+      "lesionados": 1,
+      "meses": [
+        "mar"
+      ],
+      "años": [
+        "2023"
+      ],
+      "factorSemSanta": 100.0,
+      "radioMetros": 500
+    },
+    {
+      "id": "C6-HS-7",
+      "corridorId": "C6",
+      "lat": 5.548517,
+      "lng": -73.439674,
+      "totalIncidentes": 3,
+      "iraScore": 100,
+      "severidadMax": "GRAVE",
+      "hipotesisPrincipal": "SIN DATOS",
+      "vehiculoPrincipal": "MOTOCICLETA",
+      "horaCritica": "00:00 - 05:59",
+      "muertos": 0,
+      "lesionados": 2,
+      "meses": [
+        "mar"
+      ],
+      "años": [
+        "2024"
+      ],
+      "factorSemSanta": 100.0,
+      "radioMetros": 500
+    },
+    {
+      "id": "C6-HS-12",
+      "corridorId": "C6",
+      "lat": 5.209224,
+      "lng": -73.601099,
+      "totalIncidentes": 24,
+      "iraScore": 100,
+      "severidadMax": "GRAVE",
+      "hipotesisPrincipal": "SIN DATOS",
+      "vehiculoPrincipal": "BUS",
+      "horaCritica": "00:00 - 05:59",
+      "muertos": 0,
+      "lesionados": 19,
+      "meses": [
+        "mar",
+        "ago",
+        "jun"
+      ],
+      "años": [
+        "2023",
+        "2024"
+      ],
+      "factorSemSanta": 70.8,
+      "radioMetros": 500
+    },
+    {
+      "id": "C6-HS-19",
+      "corridorId": "C6",
+      "lat": 4.916913,
+      "lng": -73.850022,
+      "totalIncidentes": 3,
+      "iraScore": 100,
+      "severidadMax": "GRAVE",
+      "hipotesisPrincipal": "SIN DATOS",
+      "vehiculoPrincipal": "MOTOCICLETA",
+      "horaCritica": "18:00 - 23:59",
+      "muertos": 0,
+      "lesionados": 2,
+      "meses": [
+        "abr"
+      ],
+      "años": [
+        "2023"
+      ],
+      "factorSemSanta": 100.0,
+      "radioMetros": 500
+    },
+    {
+      "id": "C6-HS-37",
+      "corridorId": "C6",
+      "lat": 5.445878,
+      "lng": -73.434828,
+      "totalIncidentes": 3,
+      "iraScore": 100,
+      "severidadMax": "GRAVE",
+      "hipotesisPrincipal": "SIN DATOS",
+      "vehiculoPrincipal": "MOTOCICLETA",
+      "horaCritica": "18:00 - 23:59",
+      "muertos": 0,
+      "lesionados": 2,
+      "meses": [
+        "mar"
+      ],
+      "años": [
+        "2024"
+      ],
+      "factorSemSanta": 100.0,
+      "radioMetros": 500
+    },
+    {
+      "id": "C6-HS-97",
+      "corridorId": "C6",
+      "lat": 5.456389,
+      "lng": -73.504342,
+      "totalIncidentes": 4,
+      "iraScore": 100,
+      "severidadMax": "GRAVE",
+      "hipotesisPrincipal": "SIN DATOS",
+      "vehiculoPrincipal": "SIN DATOS",
+      "horaCritica": "00:00 - 05:59",
+      "muertos": 0,
+      "lesionados": 3,
+      "meses": [
+        "abr"
+      ],
+      "años": [
+        "2024"
+      ],
+      "factorSemSanta": 100.0,
+      "radioMetros": 500
+    },
+    {
+      "id": "C6-HS-85",
+      "corridorId": "C6",
+      "lat": 5.51312,
+      "lng": -73.345868,
+      "totalIncidentes": 3,
+      "iraScore": 96,
+      "severidadMax": "GRAVE",
+      "hipotesisPrincipal": "SIN DATOS",
+      "vehiculoPrincipal": "SIN DATOS",
+      "horaCritica": "00:00 - 05:59",
+      "muertos": 0,
+      "lesionados": 2,
+      "meses": [
+        "mar"
+      ],
+      "años": [
+        "2023"
+      ],
+      "factorSemSanta": 100.0,
+      "radioMetros": 500
+    },
+    {
+      "id": "C6-HS-86",
+      "corridorId": "C6",
+      "lat": 4.78369,
+      "lng": -74.027905,
+      "totalIncidentes": 3,
+      "iraScore": 96,
+      "severidadMax": "GRAVE",
+      "hipotesisPrincipal": "SIN DATOS",
+      "vehiculoPrincipal": "SIN DATOS",
+      "horaCritica": "00:00 - 05:59",
+      "muertos": 0,
+      "lesionados": 2,
+      "meses": [
+        "abr"
+      ],
+      "años": [
+        "2023"
+      ],
+      "factorSemSanta": 100.0,
+      "radioMetros": 500
+    },
+    {
+      "id": "C6-HS-33",
+      "corridorId": "C6",
+      "lat": 5.553053,
+      "lng": -73.434674,
+      "totalIncidentes": 2,
+      "iraScore": 91,
+      "severidadMax": "GRAVE",
+      "hipotesisPrincipal": "SIN DATOS",
+      "vehiculoPrincipal": "MOTOCICLETA",
+      "horaCritica": "18:00 - 23:59",
+      "muertos": 0,
+      "lesionados": 1,
+      "meses": [
+        "mar"
+      ],
+      "años": [
+        "2024"
+      ],
+      "factorSemSanta": 100.0,
+      "radioMetros": 500
+    },
+    {
+      "id": "C6-HS-64",
+      "corridorId": "C6",
+      "lat": 5.405323,
+      "lng": -73.79564,
+      "totalIncidentes": 5,
+      "iraScore": 90,
+      "severidadMax": "GRAVE",
+      "hipotesisPrincipal": "SIN DATOS",
+      "vehiculoPrincipal": "CAMION",
+      "horaCritica": "18:00 - 23:59",
+      "muertos": 0,
+      "lesionados": 3,
+      "meses": [
+        "mar",
+        "jun"
+      ],
+      "años": [
+        "2023"
+      ],
+      "factorSemSanta": 60.0,
+      "radioMetros": 500
+    },
+    {
+      "id": "C6-HS-8",
+      "corridorId": "C6",
+      "lat": 5.055628,
+      "lng": -73.799476,
+      "totalIncidentes": 7,
+      "iraScore": 88,
+      "severidadMax": "GRAVE",
+      "hipotesisPrincipal": "SIN DATOS",
+      "vehiculoPrincipal": "MOTOCICLETA",
+      "horaCritica": "00:00 - 05:59",
+      "muertos": 0,
+      "lesionados": 3,
+      "meses": [
+        "mar",
+        "jun",
+        "nov"
+      ],
+      "años": [
+        "2023",
+        "2024"
+      ],
+      "factorSemSanta": 42.9,
+      "radioMetros": 500
+    },
+    {
+      "id": "C6-HS-130",
+      "corridorId": "C6",
+      "lat": 5.493711,
+      "lng": -73.402742,
+      "totalIncidentes": 3,
+      "iraScore": 88,
+      "severidadMax": "GRAVE",
+      "hipotesisPrincipal": "SIN DATOS",
+      "vehiculoPrincipal": "MOTOCICLETA",
+      "horaCritica": "06:00 - 11:59",
+      "muertos": 0,
+      "lesionados": 2,
+      "meses": [
+        "mar"
+      ],
+      "años": [
+        "2024"
+      ],
+      "factorSemSanta": 100.0,
+      "radioMetros": 500
+    },
+    {
+      "id": "C6-HS-99",
+      "corridorId": "C6",
+      "lat": 5.055186,
+      "lng": -73.803674,
+      "totalIncidentes": 7,
+      "iraScore": 86,
+      "severidadMax": "GRAVE",
+      "hipotesisPrincipal": "SIN DATOS",
+      "vehiculoPrincipal": "BUSETA",
+      "horaCritica": "00:00 - 05:59",
+      "muertos": 0,
+      "lesionados": 4,
+      "meses": [
+        "mar"
+      ],
+      "años": [
+        "2024"
+      ],
+      "factorSemSanta": 100.0,
+      "radioMetros": 500
+    },
+    {
+      "id": "C7-HS-24",
+      "corridorId": "C7",
+      "lat": 10.983544,
+      "lng": -74.765967,
+      "totalIncidentes": 3,
+      "iraScore": 100,
+      "severidadMax": "GRAVE",
+      "hipotesisPrincipal": "SIN DATOS",
+      "vehiculoPrincipal": "MOTOCICLETA",
+      "horaCritica": "18:00 - 23:59",
+      "muertos": 0,
+      "lesionados": 2,
+      "meses": [
+        "abr"
+      ],
+      "años": [
+        "2023"
+      ],
+      "factorSemSanta": 100.0,
+      "radioMetros": 500
+    },
+    {
+      "id": "C7-HS-44",
+      "corridorId": "C7",
+      "lat": 11.257476,
+      "lng": -74.10348,
+      "totalIncidentes": 4,
+      "iraScore": 100,
+      "severidadMax": "GRAVE",
+      "hipotesisPrincipal": "SIN DATOS",
+      "vehiculoPrincipal": "MOTOCICLETA",
+      "horaCritica": "18:00 - 23:59",
+      "muertos": 0,
+      "lesionados": 3,
+      "meses": [
+        "abr"
+      ],
+      "años": [
+        "2024"
+      ],
+      "factorSemSanta": 100.0,
+      "radioMetros": 500
+    },
+    {
+      "id": "C7-HS-54",
+      "corridorId": "C7",
+      "lat": 10.932173,
+      "lng": -74.815148,
+      "totalIncidentes": 3,
+      "iraScore": 100,
+      "severidadMax": "GRAVE",
+      "hipotesisPrincipal": "SIN DATOS",
+      "vehiculoPrincipal": "MOTOCICLETA",
+      "horaCritica": "18:00 - 23:59",
+      "muertos": 0,
+      "lesionados": 2,
+      "meses": [
+        "mar"
+      ],
+      "años": [
+        "2024"
+      ],
+      "factorSemSanta": 100.0,
+      "radioMetros": 500
+    },
+    {
+      "id": "C7-HS-50",
+      "corridorId": "C7",
+      "lat": 10.827562,
+      "lng": -74.908501,
+      "totalIncidentes": 17,
+      "iraScore": 99,
+      "severidadMax": "GRAVE",
+      "hipotesisPrincipal": "SIN DATOS",
+      "vehiculoPrincipal": "BUSETA",
+      "horaCritica": "00:00 - 05:59",
+      "muertos": 0,
+      "lesionados": 13,
+      "meses": [
+        "abr",
+        "jun"
+      ],
+      "años": [
+        "2023",
+        "2024"
+      ],
+      "factorSemSanta": 88.2,
+      "radioMetros": 500
+    },
+    {
+      "id": "C7-HS-188",
+      "corridorId": "C7",
+      "lat": 10.989759,
+      "lng": -74.549486,
+      "totalIncidentes": 4,
+      "iraScore": 94,
+      "severidadMax": "GRAVE",
+      "hipotesisPrincipal": "SIN DATOS",
+      "vehiculoPrincipal": "CAMION",
+      "horaCritica": "00:00 - 05:59",
+      "muertos": 0,
+      "lesionados": 3,
+      "meses": [
+        "ene"
+      ],
+      "años": [
+        "2024"
+      ],
+      "factorSemSanta": 0.0,
+      "radioMetros": 500
+    },
+    {
+      "id": "C7-HS-48",
+      "corridorId": "C7",
+      "lat": 10.822282,
+      "lng": -74.11843,
+      "totalIncidentes": 2,
+      "iraScore": 91,
+      "severidadMax": "GRAVE",
+      "hipotesisPrincipal": "SIN DATOS",
+      "vehiculoPrincipal": "MOTOCICLETA",
+      "horaCritica": "18:00 - 23:59",
+      "muertos": 0,
+      "lesionados": 1,
+      "meses": [
+        "abr"
+      ],
+      "años": [
+        "2024"
+      ],
+      "factorSemSanta": 100.0,
+      "radioMetros": 500
+    },
+    {
+      "id": "C7-HS-58",
+      "corridorId": "C7",
+      "lat": 10.749106,
+      "lng": -74.767211,
+      "totalIncidentes": 15,
+      "iraScore": 89,
+      "severidadMax": "GRAVE",
+      "hipotesisPrincipal": "SIN DATOS",
+      "vehiculoPrincipal": "MOTOCICLETA",
+      "horaCritica": "00:00 - 05:59",
+      "muertos": 0,
+      "lesionados": 10,
+      "meses": [
+        "abr",
+        "dic"
+      ],
+      "años": [
+        "2024"
+      ],
+      "factorSemSanta": 40.0,
+      "radioMetros": 500
+    },
+    {
+      "id": "C7-HS-177",
+      "corridorId": "C7",
+      "lat": 10.970505,
+      "lng": -74.376682,
+      "totalIncidentes": 3,
+      "iraScore": 88,
+      "severidadMax": "GRAVE",
+      "hipotesisPrincipal": "SIN DATOS",
+      "vehiculoPrincipal": "MOTOCICLETA",
+      "horaCritica": "06:00 - 11:59",
+      "muertos": 0,
+      "lesionados": 2,
+      "meses": [
+        "abr"
+      ],
+      "años": [
+        "2023"
+      ],
+      "factorSemSanta": 100.0,
+      "radioMetros": 500
+    },
+    {
+      "id": "C7-HS-194",
+      "corridorId": "C7",
+      "lat": 10.842464,
+      "lng": -74.819207,
+      "totalIncidentes": 4,
+      "iraScore": 87,
+      "severidadMax": "GRAVE",
+      "hipotesisPrincipal": "SIN DATOS",
+      "vehiculoPrincipal": "MOTOCICLETA",
+      "horaCritica": "12:00 - 17:59",
+      "muertos": 0,
+      "lesionados": 3,
+      "meses": [
+        "abr"
+      ],
+      "años": [
+        "2023"
+      ],
+      "factorSemSanta": 100.0,
+      "radioMetros": 500
+    },
+    {
+      "id": "C7-HS-90",
+      "corridorId": "C7",
+      "lat": 10.713534,
+      "lng": -74.909948,
+      "totalIncidentes": 9,
+      "iraScore": 86,
+      "severidadMax": "GRAVE",
+      "hipotesisPrincipal": "SIN DATOS",
+      "vehiculoPrincipal": "MOTOCICLETA",
+      "horaCritica": "06:00 - 11:59",
+      "muertos": 0,
+      "lesionados": 7,
+      "meses": [
+        "ene",
+        "ago"
+      ],
+      "años": [
+        "2023",
+        "2024"
+      ],
+      "factorSemSanta": 0.0,
+      "radioMetros": 500
+    },
+    {
+      "id": "C7-HS-207",
+      "corridorId": "C7",
+      "lat": 10.78483,
+      "lng": -74.904645,
+      "totalIncidentes": 4,
+      "iraScore": 84,
+      "severidadMax": "GRAVE",
+      "hipotesisPrincipal": "SIN DATOS",
+      "vehiculoPrincipal": "MOTOCICLETA",
+      "horaCritica": "18:00 - 23:59",
+      "muertos": 0,
+      "lesionados": 3,
+      "meses": [
+        "dic"
+      ],
+      "años": [
+        "2024"
+      ],
+      "factorSemSanta": 0.0,
+      "radioMetros": 500
+    },
+    {
+      "id": "C7-HS-20",
+      "corridorId": "C7",
+      "lat": 10.984391,
+      "lng": -74.720401,
+      "totalIncidentes": 16,
+      "iraScore": 82,
+      "severidadMax": "GRAVE",
+      "hipotesisPrincipal": "SIN DATOS",
+      "vehiculoPrincipal": "BUS",
+      "horaCritica": "00:00 - 05:59",
+      "muertos": 0,
+      "lesionados": 10,
+      "meses": [
+        "mar",
+        "ago",
+        "sep"
+      ],
+      "años": [
+        "2023",
+        "2024"
+      ],
+      "factorSemSanta": 56.2,
+      "radioMetros": 500
+    },
+    {
+      "id": "C7-HS-75",
+      "corridorId": "C7",
+      "lat": 10.980406,
+      "lng": -74.314219,
+      "totalIncidentes": 4,
+      "iraScore": 81,
+      "severidadMax": "GRAVE",
+      "hipotesisPrincipal": "SIN DATOS",
+      "vehiculoPrincipal": "MOTOCICLETA",
+      "horaCritica": "00:00 - 05:59",
+      "muertos": 0,
+      "lesionados": 2,
+      "meses": [
+        "feb"
+      ],
+      "años": [
+        "2023"
+      ],
+      "factorSemSanta": 0.0,
+      "radioMetros": 500
+    },
+    {
+      "id": "C7-HS-79",
+      "corridorId": "C7",
+      "lat": 10.912863,
+      "lng": -74.872049,
+      "totalIncidentes": 2,
+      "iraScore": 81,
+      "severidadMax": "GRAVE",
+      "hipotesisPrincipal": "SIN DATOS",
+      "vehiculoPrincipal": "MOTOCICLETA",
+      "horaCritica": "00:00 - 05:59",
+      "muertos": 0,
+      "lesionados": 1,
+      "meses": [
+        "ene"
+      ],
+      "años": [
+        "2024"
+      ],
+      "factorSemSanta": 0.0,
+      "radioMetros": 500
+    },
+    {
+      "id": "C7-HS-95",
+      "corridorId": "C7",
+      "lat": 10.909877,
+      "lng": -74.81476,
+      "totalIncidentes": 2,
+      "iraScore": 81,
+      "severidadMax": "GRAVE",
+      "hipotesisPrincipal": "SIN DATOS",
+      "vehiculoPrincipal": "MOTOCICLETA",
+      "horaCritica": "00:00 - 05:59",
+      "muertos": 0,
+      "lesionados": 1,
+      "meses": [
+        "sep"
+      ],
+      "años": [
+        "2024"
+      ],
+      "factorSemSanta": 0.0,
+      "radioMetros": 500
+    }
+  ]
+}

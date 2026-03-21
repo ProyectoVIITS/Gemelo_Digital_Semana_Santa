@@ -60,7 +60,7 @@ export default function ModuleSelector() {
         <div className="flex items-center justify-center gap-2 mt-6">
           <div className="h-px w-16 bg-gradient-to-r from-transparent to-slate-700" />
           <p className="text-xs text-slate-500 uppercase tracking-widest">
-            Instituto Nacional de Vías — Ministerio de Transporte de Colombia
+            Dirección de Tránsito y Transporte — DITRA · Instituto Nacional de Vías — Ministerio de Transporte
           </p>
           <div className="h-px w-16 bg-gradient-to-l from-transparent to-slate-700" />
         </div>

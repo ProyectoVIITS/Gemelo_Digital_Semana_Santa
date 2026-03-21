@@ -29,19 +29,6 @@ const modules = [
     statusColor: '#22c55e',
     tags: ['7 corredores', '37 peajes', '7 escenarios', 'Simulador'],
   },
-  {
-    title: 'Gemelo Digital — Peaje Chuzacá',
-    subtitle: 'Autopista Sur Km 14, Soacha, Cundinamarca',
-    description: 'Monitoreo inteligente de infraestructura vial con cámaras PTZ, conteo vehicular y visualización 2.5D.',
-    path: '/peaje-chuzaca',
-    icon: Building2,
-    accent: '#0ea5e9',
-    accentBg: 'rgba(14, 165, 233, 0.08)',
-    accentBorder: 'rgba(14, 165, 233, 0.25)',
-    status: 'Piloto',
-    statusColor: '#0ea5e9',
-    tags: ['4 carriles', 'PTZ', 'CCTV', 'Tiempo real'],
-  },
 ];
 
 export default function ModuleSelector() {
@@ -80,7 +67,7 @@ export default function ModuleSelector() {
       </div>
 
       {/* Module Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6 max-w-6xl w-full relative z-10">
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6 max-w-4xl w-full relative z-10">
         {modules.map((mod) => {
           const Icon = mod.icon;
           return (

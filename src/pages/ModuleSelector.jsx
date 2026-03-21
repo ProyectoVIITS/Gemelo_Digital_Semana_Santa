@@ -159,10 +159,47 @@ export default function ModuleSelector() {
         })}
       </div>
 
+      {/* Entidades colaboradoras */}
+      <div className="mt-14 relative z-10 w-full max-w-3xl">
+        <div className="flex items-center justify-center gap-2 mb-5">
+          <div className="h-px flex-1 max-w-[80px] bg-gradient-to-r from-transparent to-slate-700/50" />
+          <span className="text-[9px] uppercase tracking-[0.25em] text-slate-600 font-mono">
+            Entidades Colaboradoras
+          </span>
+          <div className="h-px flex-1 max-w-[80px] bg-gradient-to-l from-transparent to-slate-700/50" />
+        </div>
+
+        <div className="flex items-center justify-center gap-10 md:gap-16">
+          {[
+            { src: '/logos/mintransporte.png', alt: 'Ministerio de Transporte', name: 'MinTransporte' },
+            { src: '/logos/invias.png', alt: 'Instituto Nacional de Vías', name: 'INVÍAS' },
+            { src: '/logos/ditra.jpeg', alt: 'Dirección de Tránsito y Transporte', name: 'DITRA' },
+          ].map((entity) => (
+            <div key={entity.name} className="flex flex-col items-center gap-2 group">
+              <div className="w-16 h-16 md:w-20 md:h-20 rounded-xl flex items-center justify-center p-2 transition-all duration-300 group-hover:scale-105"
+                style={{
+                  backgroundColor: 'rgba(255, 255, 255, 0.04)',
+                  border: '1px solid rgba(255, 255, 255, 0.08)',
+                }}>
+                <img
+                  src={entity.src}
+                  alt={entity.alt}
+                  className="max-w-full max-h-full object-contain"
+                  style={{ filter: 'brightness(1.1) contrast(1.05)' }}
+                />
+              </div>
+              <span className="text-[8px] font-mono text-slate-600 uppercase tracking-wider group-hover:text-slate-400 transition-colors">
+                {entity.name}
+              </span>
+            </div>
+          ))}
+        </div>
+      </div>
+
       {/* Footer */}
-      <div className="mt-12 text-center relative z-10">
+      <div className="mt-8 text-center relative z-10">
         <p className="text-[10px] font-mono text-slate-600 uppercase tracking-wider">
-          VIITS-NEXUS v0.1-PILOT · Dirección Técnica y de Estructuración — INVÍAS
+          VIITS-NEXUS v0.1-PILOT · República de Colombia
         </p>
       </div>
     </div>

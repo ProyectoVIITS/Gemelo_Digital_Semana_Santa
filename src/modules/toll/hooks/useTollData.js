@@ -12,20 +12,27 @@ const BASE_IRT = {
   'C7-03': 38,
 };
 
-// Perfil horario realista de flujo vehicular en peajes colombianos (multiplicador 0-1)
-// Basado en patrones típicos INVÍAS: picos 6-9am, 12-2pm, 5-8pm; valles madrugada
+// Perfil horario SEMANA SANTA — fin de semana largo
+// Patrón especial: salidas de Bogotá altamente ocupadas en todo el horario diurno (7am-8pm)
+// No solo picos AM/PM sino flujo sostenido alto durante el día
+// Fuente: análisis INVÍAS operación retorno / operación salida festivos
 const HOURLY_FLOW_PROFILE = [
 //  0     1     2     3     4     5     6     7     8     9    10    11
-  0.08, 0.05, 0.04, 0.04, 0.06, 0.15, 0.45, 0.72, 0.85, 0.90, 0.78, 0.70,
+  0.12, 0.08, 0.06, 0.05, 0.08, 0.20, 0.55, 0.82, 0.92, 0.95, 0.90, 0.85,
 // 12    13    14    15    16    17    18    19    20    21    22    23
-  0.82, 0.75, 0.68, 0.72, 0.80, 0.92, 0.88, 0.65, 0.42, 0.28, 0.18, 0.12,
+  0.88, 0.85, 0.82, 0.88, 0.92, 0.95, 0.90, 0.75, 0.50, 0.32, 0.22, 0.15,
 ];
 
 // Multiplicador Semana Santa (45% más tráfico en festivos, especialmente corredores turísticos)
 const SS_MULTIPLIER = 1.45;
 
+// Get Colombia hour (America/Bogota UTC-5) regardless of browser timezone
+function getColombiaHour() {
+  return parseInt(new Date().toLocaleString('en-US', { hour: 'numeric', hour12: false, timeZone: 'America/Bogota' }), 10);
+}
+
 function getHourlyFactor() {
-  const hour = new Date().getHours();
+  const hour = getColombiaHour();
   return HOURLY_FLOW_PROFILE[hour] || 0.5;
 }
 
@@ -58,16 +65,17 @@ function buildSnapshot(irt, stationId) {
   const occup = clamp(Math.round(irt * 0.65 + hourFactor * 25 + 8 + rnd(4)), 5, 95);
   const c4closed = irt > 82;
 
-  // Cola solo se forma en horas pico: 6-8am y 15-17 (3-5pm)
-  // En horas valle la cola es 0 o mínima
-  const hour = new Date().getHours();
+  // SEMANA SANTA — fin de semana largo
+  // Colas significativas solo en horas pico: 6-8am y 15-17 (3-5pm)
+  // Colas moderadas en horario diurno (alta demanda sostenida en festivo)
+  // Sin cola en madrugada/noche
+  const hour = getColombiaHour();
   const isPeakAM = hour >= 6 && hour <= 8;
   const isPeakPM = hour >= 15 && hour <= 17;
   const isPeak = isPeakAM || isPeakPM;
-  // Factor de cola: 1.0 en pico, 0.0 en valle profundo, 0.2-0.4 en horas intermedias
   const queueFactor = isPeak ? 1.0
-    : (hour >= 9 && hour <= 14) ? 0.3   // mañana-tarde: cola leve posible
-    : (hour >= 18 && hour <= 20) ? 0.25  // tarde-noche: algo de cola
+    : (hour >= 9 && hour <= 14) ? 0.45   // Semana Santa: más cola durante el día
+    : (hour >= 18 && hour <= 20) ? 0.35  // tarde-noche: moderada
     : 0.0;                                // madrugada/noche: sin cola
 
   const lanes = [
@@ -98,7 +106,7 @@ function buildSnapshot(irt, stationId) {
     // En horas pico la velocidad baja, en valles sube
     const s = clamp(Math.round(95 - hf * 40 - irt * 0.3 + rnd(8)), 20, 110);
     return {
-      time: t.toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit', hour12: false }),
+      time: t.toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit', hour12: false, timeZone: 'America/Bogota' }),
       avgSpeed: s,
       limit: 80,
       violations: s > 80 ? Math.round(Math.random() * 4) : 0,
@@ -112,7 +120,7 @@ function updateHistory(prev, irt) {
   const speed = clamp(Math.round(85 - irt * 0.62 + rnd(10)), 15, 110);
   const now = new Date();
   const point = {
-    time: now.toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit', hour12: false }),
+    time: now.toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit', hour12: false, timeZone: 'America/Bogota' }),
     avgSpeed: speed,
     limit: 80,
     violations: speed > 80 ? Math.round(Math.random() * 4) : 0,
@@ -137,7 +145,7 @@ export default function useTollData(stationId, corridorId) {
         const alertProb = isHighRisk ? 0.05 : 0.02;
         if (Math.random() < alertProb) {
           newAlerts.push({
-            id: String(++alertIdRef.current),
+            id: `t-${(++alertIdRef.current) % 100000}-${Date.now().toString(36)}`,
             severity: irt > 70 ? 'critical' : 'warning',
             message: generateAlertMessage(irt),
             timestamp: new Date(),

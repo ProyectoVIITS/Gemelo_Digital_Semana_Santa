@@ -69,7 +69,7 @@ function MonitorHeader({ globalMetrics, clock }) {
 
       <div className="flex items-center gap-4">
         <span className="text-sm tabular-nums text-slate-300" style={{ fontFamily: 'JetBrains Mono, Space Mono, monospace' }}>
-          {clock.toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
+          {clock.toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit', second: '2-digit', timeZone: 'America/Bogota' })}
         </span>
         <div className="flex items-center gap-1.5">
           <div className="w-2 h-2 rounded-full bg-green-500 animate-pulse" />
@@ -640,9 +640,11 @@ export default function MonitorPage() {
 
   const handleLoadComplete = useCallback(() => setLoading(false), []);
 
-  // Clock tick
+  // Clock tick — Colombia official time (America/Bogota UTC-5), never drifts
   React.useEffect(() => {
-    const t = setInterval(() => setClock(new Date()), 1000);
+    const tick = () => setClock(new Date());
+    tick();
+    const t = setInterval(tick, 1000);
     return () => clearInterval(t);
   }, []);
 

@@ -97,7 +97,7 @@ export function useCorridorData(updateIntervalMs = 2000) {
   const intervalRef = useRef(null);
 
   const update = useCallback(() => {
-    const hour = new Date().getHours();
+    const hour = parseInt(new Date().toLocaleString('en-US', { hour: 'numeric', hour12: false, timeZone: 'America/Bogota' }), 10);
     const newData = {};
 
     NEXUS_CORRIDORS.forEach(corridor => {
@@ -112,7 +112,7 @@ export function useCorridorData(updateIntervalMs = 2000) {
       NEXUS_CORRIDORS.forEach(c => {
         const history = updated[c.id] || [];
         updated[c.id] = [...history.slice(-15), {
-          time: new Date().toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit' }),
+          time: new Date().toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit', timeZone: 'America/Bogota' }),
           irt: newData[c.id].irt,
         }];
       });

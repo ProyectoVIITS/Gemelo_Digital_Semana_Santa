@@ -341,6 +341,9 @@ export default function TollCanvas({
     }
   }, [mode, corridorColor, CANVAS_H, BOOTH_W, BOOTH_H, MAX_VEHICLES]);
 
+  /* ── Spawn accumulator: guarantees continuous vehicle flow even at low flowRate ── */
+  const spawnAccRef = useRef(0);
+
   const update = useCallback((timestamp, deltaMs) => {
     const { w, h } = sizeRef.current;
     const { lanes: currentLanes, metrics: currentMetrics } = dataRef.current;
@@ -352,12 +355,20 @@ export default function TollCanvas({
     const countLineX = w * COUNT_LINE_X;
     const isMini = mode === 'mini';
 
-    // Spawn vehicles
+    // ── Spawn vehicles — accumulator pattern (NEVER stops) ──
     const activeLanes = (currentLanes || []).filter(l => l.status !== 'closed' && l.active).map(l => l.id - 1);
     if (activeLanes.length > 0) {
-      const flowRate = (currentMetrics.vehiclesHour || 300) / 3600;
-      const spawnRate = flowRate * dt * activeLanes.length * (isMini ? 0.5 : 0.8);
-      if (Math.random() < spawnRate && vehicles.length < MAX_VEHICLES) {
+      // Minimum visual spawn: at least 1 vehicle every ~1.5s even at 0 flow
+      // This ensures the simulation NEVER appears frozen
+      const rawFlow = (currentMetrics.vehiclesHour || 300) / 3600;
+      const minVisualFlow = isMini ? 0.4 : 0.7; // vehicles/sec minimum for visual continuity
+      const effectiveFlow = Math.max(rawFlow * activeLanes.length, minVisualFlow);
+
+      // Accumulate fractional spawns to guarantee eventual spawn
+      spawnAccRef.current += effectiveFlow * dt;
+
+      while (spawnAccRef.current >= 1 && vehicles.length < MAX_VEHICLES) {
+        spawnAccRef.current -= 1;
         const cat = pickCategory();
         const catDef = VEHICLE_CATEGORIES[cat];
 
@@ -365,7 +376,7 @@ export default function TollCanvas({
           // Motos pasan solo por la berma inferior (lateral de C4) — no pagan peaje
           const motoY = roadBot + (isMini ? 4 : 8) + Math.random() * (isMini ? 3 : 5);
           vehicles.push({
-            x: -catDef.width,
+            x: -catDef.width - Math.random() * 40,
             lane: -1,
             category: cat,
             speed: (55 + Math.random() * 50) * catDef.speedFactor,
@@ -374,11 +385,12 @@ export default function TollCanvas({
             passedCount: false,
             isMoto: true,
             motoY,
+            stuckTimer: 0,
           });
         } else {
           const laneIdx = activeLanes[Math.floor(Math.random() * activeLanes.length)];
           vehicles.push({
-            x: -catDef.width,
+            x: -catDef.width - Math.random() * 40,
             lane: laneIdx,
             category: cat,
             speed: (40 + Math.random() * 40) * catDef.speedFactor,
@@ -386,12 +398,15 @@ export default function TollCanvas({
             waitTimer: 0,
             passedCount: false,
             isMoto: false,
+            stuckTimer: 0,
           });
         }
       }
+      // Cap accumulator to prevent burst-spawning after tab-switch
+      spawnAccRef.current = Math.min(spawnAccRef.current, 2);
     }
 
-    // Update vehicles
+    // ── Update vehicles ──
     for (let i = vehicles.length - 1; i >= 0; i--) {
       const v = vehicles[i];
       const catDef = VEHICLE_CATEGORIES[v.category];
@@ -407,20 +422,43 @@ export default function TollCanvas({
       const lane = currentLanes?.[v.lane];
       const boothX = gantryX - BOOTH_W / 2;
 
+      // ── Anti-freeze: detect stuck vehicles and force them through ──
+      const prevX = v._prevX || v.x;
+      if (Math.abs(v.x - prevX) < 0.5 && v.state !== 'at-booth') {
+        v.stuckTimer = (v.stuckTimer || 0) + dt;
+        // If stuck for more than 4 seconds (not at booth), force departure
+        if (v.stuckTimer > 4) {
+          v.state = 'departing';
+          v.speed = 30;
+          v.stuckTimer = 0;
+        }
+      } else {
+        v.stuckTimer = 0;
+      }
+      v._prevX = v.x;
+
+      // Use queue data only during peak hours — canvas-level check (Colombia time)
+      const hour = parseInt(new Date().toLocaleString('en-US', { hour: 'numeric', hour12: false, timeZone: 'America/Bogota' }), 10);
+      const isPeakHour = (hour >= 6 && hour <= 8) || (hour >= 15 && hour <= 17);
+      const laneQueue = lane ? lane.queue : 0;
+      const effectiveQueue = isPeakHour ? laneQueue : Math.min(laneQueue, 1);
+
       switch (v.state) {
         case 'approaching': {
-          const ahead = vehicles.filter(o => o.lane === v.lane && o.x > v.x && o.x < boothX && o !== v);
+          const ahead = vehicles.filter(o => o.lane === v.lane && o.x > v.x && o.x < boothX && !o.isMoto && o !== v);
           const stopX = ahead.length > 0
             ? Math.min(...ahead.map(o => o.x)) - catDef.width - 6
             : boothX - catDef.width / 2 - 4;
 
-          if (v.x + catDef.width / 2 >= stopX && lane && lane.queue > 1) {
+          if (v.x + catDef.width / 2 >= stopX && effectiveQueue > 1 && ahead.length > 0) {
             v.state = 'queued';
             v.speed = 0;
           } else if (v.x + catDef.width / 2 >= boothX - 4) {
             v.state = 'at-booth';
             v.speed = 0;
-            v.waitTimer = lane?.type === 'FacilPass' ? 0.6 + Math.random() * 0.6 : 1.2 + Math.random() * 1.0;
+            // Shorter wait during valley hours for fluid movement
+            const baseWait = lane?.type === 'FacilPass' ? 0.4 + Math.random() * 0.4 : 0.8 + Math.random() * 0.6;
+            v.waitTimer = isPeakHour ? baseWait * 1.5 : baseWait;
           } else {
             const dist = boothX - v.x;
             const factor = dist < 100 ? 0.3 + 0.7 * (dist / 100) : 1;
@@ -434,14 +472,15 @@ export default function TollCanvas({
           break;
         }
         case 'queued': {
-          const aheadQ = vehicles.filter(o => o.lane === v.lane && o.x > v.x && o !== v);
+          const aheadQ = vehicles.filter(o => o.lane === v.lane && o.x > v.x && !o.isMoto && o !== v);
           if (aheadQ.length === 0) {
+            // No vehicles ahead — advance to booth
             v.state = 'approaching';
             v.speed = 20;
           } else {
             const nearest = Math.min(...aheadQ.map(o => o.x));
             if (nearest - v.x > catDef.width + 10) {
-              v.x += 15 * dt;
+              v.x += 18 * dt; // slightly faster creep
             }
           }
           break;
@@ -450,15 +489,18 @@ export default function TollCanvas({
           v.waitTimer -= dt;
           if (v.waitTimer <= 0) {
             v.state = 'departing';
-            v.speed = 20;
+            v.speed = 25;
           }
           break;
         case 'departing':
-          v.speed = Math.min(v.speed + 60 * dt, 120);
+          v.speed = Math.min(v.speed + 70 * dt, 130);
           v.x += v.speed * dt;
           if (v.x > w + 60) vehicles.splice(i, 1);
           break;
         default:
+          // Unknown state — force departure to prevent freeze
+          v.state = 'departing';
+          v.speed = 40;
           break;
       }
     }
@@ -471,26 +513,35 @@ export default function TollCanvas({
     const ctx = canvas.getContext('2d');
     let lastTime = performance.now();
 
+    // ── ResizeObserver: setTransform (not scale) to avoid accumulation ──
     const observer = new ResizeObserver(entries => {
       for (const entry of entries) {
         const rect = entry.contentRect;
+        if (rect.width < 1) continue; // Skip zero-width
         const dpr = window.devicePixelRatio || 1;
         canvas.width = rect.width * dpr;
         canvas.height = CANVAS_H * dpr;
         canvas.style.width = `${rect.width}px`;
         canvas.style.height = `${CANVAS_H}px`;
-        ctx.scale(dpr, dpr);
+        // Use setTransform (absolute) instead of scale (relative) to avoid accumulation
+        ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
         sizeRef.current = { w: rect.width, h: CANVAS_H };
       }
     });
     observer.observe(canvas.parentElement);
 
+    // ── Animation loop: cap delta to prevent burst after tab-switch ──
+    // When browser tab is in background, rAF is paused. On return, delta could be
+    // thousands of ms → burst spawn + teleport vehicles. Cap delta to 50ms (20fps min).
+    // Also use document.visibilityState to handle tab unfocus gracefully.
     function loop(timestamp) {
-      const delta = Math.min(timestamp - lastTime, 50);
+      // Cap delta: if tab was backgrounded, delta can be huge → clamp to 50ms
+      const rawDelta = timestamp - lastTime;
+      const delta = Math.min(rawDelta, 50);
       lastTime = timestamp;
 
-      ctx.save();
       const dpr = window.devicePixelRatio || 1;
+      ctx.save();
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
       update(timestamp, delta);
       draw(ctx, timestamp);
@@ -501,9 +552,19 @@ export default function TollCanvas({
 
     animRef.current = requestAnimationFrame(loop);
 
+    // ── Visibility change: reset lastTime when tab becomes visible again ──
+    // This prevents a giant delta spike that would burst-spawn vehicles
+    const handleVisibility = () => {
+      if (document.visibilityState === 'visible') {
+        lastTime = performance.now();
+      }
+    };
+    document.addEventListener('visibilitychange', handleVisibility);
+
     return () => {
       if (animRef.current) cancelAnimationFrame(animRef.current);
       observer.disconnect();
+      document.removeEventListener('visibilitychange', handleVisibility);
     };
   }, [draw, update, CANVAS_H]);
 

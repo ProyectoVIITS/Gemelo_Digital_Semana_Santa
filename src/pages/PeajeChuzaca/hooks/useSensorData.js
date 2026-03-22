@@ -27,7 +27,7 @@ function generateInitialSpeedHistory() {
     else if (minuteOfDay < 840) base = randomBetween(55, 65);
     else base = randomBetween(65, 80);
     points.push({
-      time: t.toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit', hour12: false }),
+      time: t.toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit', hour12: false, timeZone: 'America/Bogota' }),
       avgSpeed: Math.round(base + randomBetween(-3, 3)),
       limit: 80,
       violations: Math.floor(randomBetween(0, base > 75 ? 4 : 1)),
@@ -149,7 +149,7 @@ export default function useSensorData() {
       if (t % 3 === 0) {
         const now = new Date();
         speedHistory.push({
-          time: now.toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit', hour12: false }),
+          time: now.toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit', hour12: false, timeZone: 'America/Bogota' }),
           avgSpeed,
           limit: 80,
           violations: avgSpeed > 80 ? Math.floor(randomBetween(1, 5)) : 0,

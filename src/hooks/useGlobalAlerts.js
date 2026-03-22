@@ -35,7 +35,13 @@ const ALERT_MESSAGES = {
 
 const SEVERITIES = ['info', 'warning', 'critical', 'emergency'];
 
+// Reset counter periodically to prevent unbounded growth in 24/7 operation
 let alertIdCounter = 0;
+const MAX_ALERT_ID = 100000;
+function nextAlertId() {
+  alertIdCounter = (alertIdCounter + 1) % MAX_ALERT_ID;
+  return `alert-${alertIdCounter}-${Date.now().toString(36)}`;
+}
 
 function generateAlert(corridorData) {
   if (!corridorData || Object.keys(corridorData).length === 0) return null;
@@ -83,7 +89,7 @@ function generateAlert(corridorData) {
   const messageIdx = Math.min(severityIdx, messages.length - 1);
 
   return {
-    id: `alert-${++alertIdCounter}`,
+    id: nextAlertId(),
     corridorId: corridor.corridorId,
     corridorName: nexusCorridor.shortName,
     corridorColor: CORRIDOR_COLORS[corridor.corridorId],

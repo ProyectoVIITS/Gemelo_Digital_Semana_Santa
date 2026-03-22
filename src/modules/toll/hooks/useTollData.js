@@ -164,33 +164,39 @@ function buildSnapshot(irt, stationId) {
 
   const lanes = [];
   let retornoUsed = 0;
-  let salidaUsed = 0;
+  let extraRetornoUsed = 0;
+  const extrasNeeded = Math.max(0, retornoActivas - booth.retorno);
 
   for (let i = 0; i < totalLaneCount; i++) {
     const isRetornoBooth = i < booth.retorno; // C1, C2... son casetas de retorno físicas
 
     let finalActive;
+    let laneDirection;
+
     if (isRetorno) {
-      // RETORNO: activar casetas de retorno (C1, C2...) + extras progresivamente
       if (isRetornoBooth) {
+        // Casetas retorno físicas (C1, C2): siempre activas en retorno
         finalActive = retornoUsed < retornoActivas;
+        laneDirection = 'retorno';
         retornoUsed++;
+      } else if (extraRetornoUsed < extrasNeeded) {
+        // Casetas de salida reconvertidas a retorno por demanda (C3, C4...)
+        finalActive = true;
+        laneDirection = 'retorno-extra';
+        extraRetornoUsed++;
       } else {
-        // Casetas extra de salida reconvertidas a retorno por demanda
-        const extrasNeeded = retornoActivas - booth.retorno;
-        finalActive = salidaUsed < extrasNeeded || salidaUsed < salidaActivas;
-        salidaUsed++;
+        // Resto de casetas: siguen como salida, TODAS activas
+        finalActive = true;
+        laneDirection = 'salida';
       }
     } else {
-      // SALIDA: C1/C2 cerradas (retorno), el resto activas
+      // SALIDA: C1/C2 cerradas (retorno), el resto activas para salida
       finalActive = !isRetornoBooth;
+      laneDirection = isRetornoBooth ? 'retorno' : 'salida';
     }
 
     const activeLaneIndex = finalActive ? lanes.filter(l => l.active).length : -1;
     const isFacilPass = finalActive && activeLaneIndex < Math.ceil(booth.total * 0.25);
-
-    // En retorno, marcar si es caseta reconvertida
-    const laneDirection = isRetornoBooth ? 'retorno' : (isRetorno && finalActive && i >= booth.retorno && i < booth.retorno + (retornoActivas - booth.retorno)) ? 'retorno-extra' : 'salida';
     const isRetLane = laneDirection === 'retorno' || laneDirection === 'retorno-extra';
 
     // Velocidad y cola realistas según dirección del carril

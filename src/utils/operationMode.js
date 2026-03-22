@@ -15,13 +15,14 @@ const TZ = 'America/Bogota';
  * Fechas de salida: flujo vehicular saliendo de Bogotá hacia destinos
  */
 const OPERATION_CALENDAR = {
-  // Festivo San José (lunes festivo marzo)
+  // Festivo San José — Retorno progresivo
+  '2026-03-22': { mode: 'retorno_progresivo', label: 'Operación Retorno · Inicio Progresivo', startHour: 14 },
   '2026-03-23': { mode: 'retorno', label: 'Operación Retorno · Lunes Festivo' },
 
   // Semana Santa 2026
   '2026-04-02': { mode: 'salida',  label: 'Operación Salida · Jueves Santo' },
   '2026-04-03': { mode: 'salida',  label: 'Operación Salida · Viernes Santo' },
-  '2026-04-04': { mode: 'retorno', label: 'Operación Retorno · Sábado de Gloria' },
+  '2026-04-04': { mode: 'retorno_progresivo', label: 'Operación Retorno · Sábado de Gloria', startHour: 12 },
   '2026-04-05': { mode: 'retorno', label: 'Operación Retorno · Domingo de Resurrección' },
 };
 
@@ -48,26 +49,139 @@ export function getColombiaHour() {
 }
 
 /**
+ * Escala progresiva de casetas de retorno según hora del día
+ * Aplica a peajes durante "retorno_progresivo": se van habilitando casetas
+ * a medida que crece la demanda.
+ *
+ * Ejemplo Chuzacá (10 casetas, 1 retorno base):
+ *   14h: 3 casetas retorno (arranque)
+ *   16h: 4 casetas retorno
+ *   18h: 5 casetas retorno
+ *   20h: 4 casetas retorno (baja nocturna)
+ *
+ * El lunes festivo (retorno completo):
+ *   06h: 4 casetas
+ *   10h: 6 casetas
+ *   13h-17h: 8-9 casetas (pico máximo)
+ *   20h: 5 casetas
+ *   23h: 3 casetas
+ */
+const RETORNO_PROGRESSIVE_SCALE = {
+  // hora → fracción de casetas totales destinadas a retorno
+  // Domingo 22: inicio a las 14h
+  progressive: {
+    0: 0, 1: 0, 2: 0, 3: 0, 4: 0, 5: 0, 6: 0, 7: 0, 8: 0, 9: 0,
+    10: 0, 11: 0,
+    12: 0.10, // Pre-retorno: primeros vehículos regresando (1 caseta retorno visible)
+    13: 0.15, // Pre-retorno: flujo creciente de anticipación
+    14: 0.30, // ARRANQUE OFICIAL: 3 casetas retorno (reporte DITRA)
+    15: 0.35,
+    16: 0.40, // 4/10
+    17: 0.45,
+    18: 0.50, // 5/10
+    19: 0.45,
+    20: 0.40,
+    21: 0.35,
+    22: 0.30,
+    23: 0.25,
+  },
+  // Lunes festivo: retorno completo con pico 13-17h
+  full: {
+    0: 0.20, 1: 0.20, 2: 0.20, 3: 0.20, 4: 0.25, 5: 0.30,
+    6: 0.40, 7: 0.45, 8: 0.50, 9: 0.55,
+    10: 0.60, 11: 0.65, 12: 0.70,
+    13: 0.80, 14: 0.85, 15: 0.90, 16: 0.90, 17: 0.85,
+    18: 0.70, 19: 0.60,
+    20: 0.50, 21: 0.40, 22: 0.30, 23: 0.25,
+  },
+};
+
+/**
  * Determinar el modo de operación actual
- * @returns {{ mode: 'retorno'|'salida', label: string, isRetorno: boolean }}
+ * @returns {{ mode: string, label: string, isRetorno: boolean, retornoScale: number }}
  */
 export function getOperationMode() {
   const dateStr = getColombiaDate();
+  const hour = getColombiaHour();
   const entry = OPERATION_CALENDAR[dateStr];
 
   if (entry) {
+    if (entry.mode === 'retorno_progresivo') {
+      const scale = RETORNO_PROGRESSIVE_SCALE.progressive[hour] || 0;
+      // Si la escala es > 0, activar modo retorno (incluye pre-retorno 12-13h)
+      if (scale > 0) {
+        const isPreRetorno = hour < entry.startHour;
+        return {
+          mode: 'retorno',
+          label: isPreRetorno ? entry.label + ' · Pre-retorno' : entry.label,
+          isRetorno: true,
+          retornoScale: scale,
+        };
+      }
+      // Sin escala: salida normal
+      return {
+        mode: 'salida',
+        label: entry.label + ' (previo)',
+        isRetorno: false,
+        retornoScale: 0,
+      };
+    }
+
+    if (entry.mode === 'retorno') {
+      const scale = RETORNO_PROGRESSIVE_SCALE.full[hour] || 0.50;
+      return {
+        mode: 'retorno',
+        label: entry.label,
+        isRetorno: true,
+        retornoScale: scale,
+      };
+    }
+
     return {
       mode: entry.mode,
       label: entry.label,
-      isRetorno: entry.mode === 'retorno',
+      isRetorno: false,
+      retornoScale: 0,
     };
   }
 
-  // Default: salida (comportamiento actual sin cambios)
+  // Default: salida
   return {
     mode: 'salida',
     label: 'Monitor Semana Santa 2026',
     isRetorno: false,
+    retornoScale: 0,
+  };
+}
+
+/**
+ * Calcular casetas activas de retorno para un peaje dado
+ * @param {object} boothConfig - { total, salida, retorno }
+ * @returns {{ retornoActivas: number, salidaActivas: number }}
+ */
+export function getActiveBooths(boothConfig) {
+  const { isRetorno, retornoScale } = getOperationMode();
+  const total = boothConfig.total;
+
+  if (!isRetorno) {
+    // Salida normal: todas menos las de retorno
+    return {
+      retornoActivas: boothConfig.retorno,
+      salidaActivas: boothConfig.salida,
+      totalActivas: total,
+    };
+  }
+
+  // Retorno: escalar casetas progresivamente
+  // Mínimo = casetas de retorno fijas, Máximo = total - 1 (dejar al menos 1 de salida)
+  const retornoDeseadas = Math.round(total * retornoScale);
+  const retornoActivas = Math.max(boothConfig.retorno, Math.min(retornoDeseadas, total - 1));
+  const salidaActivas = total - retornoActivas;
+
+  return {
+    retornoActivas,
+    salidaActivas,
+    totalActivas: total,
   };
 }
 

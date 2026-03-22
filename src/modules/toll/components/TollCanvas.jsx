@@ -4,6 +4,7 @@
  * Adapted from Peaje Chuzacá TollCanvas
  */
 import React, { useRef, useEffect, useCallback } from 'react';
+import { getOperationMode } from '../../../utils/operationMode';
 
 const VEHICLE_CATEGORIES = {
   M:  { name: 'Motocicleta',    color: '#4ade80', width: 12, height: 6,  speedFactor: 1.3, isMoto: true },
@@ -41,6 +42,14 @@ function pickCategory() {
 function laneY(laneIdx, roadTop, roadBot, totalLanes = 4) {
   const laneH = (roadBot - roadTop) / totalLanes;
   return roadTop + laneH * laneIdx + laneH * 0.5;
+}
+
+// Helper: make a hex color semi-transparent for counter-flow vehicles
+function adjustAlpha(hexColor, alpha) {
+  const r = parseInt(hexColor.slice(1, 3), 16);
+  const g = parseInt(hexColor.slice(3, 5), 16);
+  const b = parseInt(hexColor.slice(5, 7), 16);
+  return `rgba(${r}, ${g}, ${b}, ${alpha})`;
 }
 
 export default function TollCanvas({
@@ -107,7 +116,7 @@ export default function TollCanvas({
     // Bermas
     ctx.fillStyle = '#141c2b';
     ctx.fillRect(0, roadTop - (isMini ? 3 : 6), w, isMini ? 3 : 6);
-    ctx.fillRect(0, roadBot, w, isMini ? 3 : 6);
+    ctx.fillRect(0, roadBot, w, isMini ? 3 : 6); // lower berma (motos)
 
     // Lane dividers
     ctx.strokeStyle = 'rgba(255,255,255,0.12)';
@@ -132,16 +141,21 @@ export default function TollCanvas({
       }
     }
 
-    // Direction indicator (Operación Retorno / Salida)
+    // Direction indicator — shows both directions with lane counts
     if (!isMini) {
-      const isRetorno = dataRef.current.direction === 'retorno';
-      const arrowLabel = isRetorno ? '\u2190 RETORNO A BOGOT\u00C1' : '\u2192 SALIDA';
-      const arrowColor = isRetorno ? '#f59e0b' : '#22c55e';
-      ctx.fillStyle = arrowColor;
+      const retLanes = (currentLanes || []).filter(l => l.active && (l.direction === 'retorno' || l.direction === 'retorno-extra'));
+      const salLanes = (currentLanes || []).filter(l => l.active && l.direction === 'salida');
+
       ctx.font = 'bold 10px JetBrains Mono, monospace';
-      ctx.textAlign = 'left';
       ctx.globalAlpha = 0.75;
-      ctx.fillText(arrowLabel, 12, roadTop - 22);
+      // Salida label (left → right flow)
+      ctx.fillStyle = salLanes.length > retLanes.length ? '#22c55e' : 'rgba(34,197,94,0.45)';
+      ctx.textAlign = 'left';
+      ctx.fillText(`→ SALIDA (${salLanes.length})`, 12, roadTop - 22);
+      // Retorno label (right → left flow)
+      ctx.fillStyle = retLanes.length > 0 ? (retLanes.length >= salLanes.length ? '#f59e0b' : 'rgba(245,158,11,0.6)') : 'rgba(245,158,11,0.25)';
+      ctx.textAlign = 'right';
+      ctx.fillText(`← RETORNO (${retLanes.length})`, w - 12, roadTop - 22);
       ctx.globalAlpha = 1;
     }
 
@@ -281,6 +295,32 @@ export default function TollCanvas({
       }
     }
 
+    // ── Separador visual entre sentidos de circulación (dentro de la vía) ──
+    // Doble línea amarilla continua entre carriles de retorno y salida
+    if (!isMini && currentLanes && currentLanes.length > 0) {
+      // Find the boundary: last retorno lane index
+      let lastRetornoIdx = -1;
+      for (let i = 0; i < currentLanes.length; i++) {
+        if (currentLanes[i].direction === 'retorno' || currentLanes[i].direction === 'retorno-extra') {
+          lastRetornoIdx = i;
+        }
+      }
+      if (lastRetornoIdx >= 0 && lastRetornoIdx < currentLanes.length - 1) {
+        const dividerY = roadTop + laneH * (lastRetornoIdx + 1);
+        ctx.strokeStyle = 'rgba(250, 204, 21, 0.5)';
+        ctx.lineWidth = 1.5;
+        ctx.setLineDash([]);
+        ctx.beginPath();
+        ctx.moveTo(0, dividerY - 1.5);
+        ctx.lineTo(w, dividerY - 1.5);
+        ctx.stroke();
+        ctx.beginPath();
+        ctx.moveTo(0, dividerY + 1.5);
+        ctx.lineTo(w, dividerY + 1.5);
+        ctx.stroke();
+      }
+    }
+
     // Vehicles
     const vehicles = vehiclesRef.current;
     for (const v of vehicles) {
@@ -289,34 +329,44 @@ export default function TollCanvas({
       const cy = v.isMoto ? v.motoY : laneY(v.lane, roadTop, roadBot, numLanes);
       const vw = isMini ? cat.width * 0.65 : cat.width;
       const vh = isMini ? cat.height * 0.65 : cat.height;
+      const headlightDir = v.isCounter ? -1 : 1; // counter vehicles face left
 
       if (cat.isMoto) {
-        // Motorcycle — small diamond/oval shape on berma
-        ctx.fillStyle = cat.color;
-        ctx.globalAlpha = 0.85;
+        // Motorcycle — small oval shape on berma
+        ctx.fillStyle = v.isCounter ? '#86efac' : cat.color; // counter motos slightly different green
+        ctx.globalAlpha = v.isCounter ? 0.6 : 0.85;
         ctx.beginPath();
         ctx.ellipse(v.x, cy, vw / 2, vh / 2, 0, 0, Math.PI * 2);
         ctx.fill();
-        // Single headlight
         if (v.state === 'approaching' || v.state === 'departing') {
           ctx.fillStyle = 'rgba(255, 255, 200, 0.7)';
           ctx.beginPath();
-          ctx.arc(v.x + vw / 2, cy, 1, 0, Math.PI * 2);
+          ctx.arc(v.x + headlightDir * (vw / 2), cy, 1, 0, Math.PI * 2);
           ctx.fill();
         }
         ctx.globalAlpha = 1;
       } else {
         // Regular vehicles
-        ctx.fillStyle = cat.color;
+        ctx.fillStyle = v.isCounter ? adjustAlpha(cat.color, 0.55) : cat.color;
         ctx.beginPath();
         ctx.roundRect(v.x - vw / 2, cy - vh / 2, vw, vh, 2);
         ctx.fill();
 
+        // Headlights — direction-aware
         if (!isMini && v.state !== 'at-booth' && v.state !== 'queued') {
-          ctx.fillStyle = 'rgba(255, 255, 200, 0.6)';
+          ctx.fillStyle = v.isCounter ? 'rgba(255, 200, 200, 0.5)' : 'rgba(255, 255, 200, 0.6)';
           ctx.beginPath();
-          ctx.arc(v.x + vw / 2 + 2, cy - 2, 1.5, 0, Math.PI * 2);
-          ctx.arc(v.x + vw / 2 + 2, cy + 2, 1.5, 0, Math.PI * 2);
+          ctx.arc(v.x + headlightDir * (vw / 2 + 2), cy - 2, 1.5, 0, Math.PI * 2);
+          ctx.arc(v.x + headlightDir * (vw / 2 + 2), cy + 2, 1.5, 0, Math.PI * 2);
+          ctx.fill();
+        }
+
+        // Tail lights for counter vehicles (red, on right side)
+        if (!isMini && v.isCounter) {
+          ctx.fillStyle = 'rgba(239, 68, 68, 0.5)';
+          ctx.beginPath();
+          ctx.arc(v.x + vw / 2 + 1, cy - 2, 1, 0, Math.PI * 2);
+          ctx.arc(v.x + vw / 2 + 1, cy + 2, 1, 0, Math.PI * 2);
           ctx.fill();
         }
       }
@@ -373,8 +423,9 @@ export default function TollCanvas({
     }
   }, [mode, corridorColor, CANVAS_H, BOOTH_W, BOOTH_H, MAX_VEHICLES]);
 
-  /* ── Spawn accumulator: guarantees continuous vehicle flow even at low flowRate ── */
+  /* ── Spawn accumulators: main flow + counter flow ── */
   const spawnAccRef = useRef(0);
+  const counterAccRef = useRef(0);
 
   const update = useCallback((timestamp, deltaMs) => {
     const { w, h } = sizeRef.current;
@@ -421,22 +472,27 @@ export default function TollCanvas({
         const approachSpeedVar = 8 + flowRatio * 12;   // 8-20 variance
 
         if (catDef.isMoto) {
-          // Motos pasan solo por la berma inferior (lateral de C4) — no pagan peaje
-          // En valle: motos más lentas (30-50 km/h), en pico: 50-80 km/h
-          const motoY = roadBot + (isMini ? 4 : 8) + Math.random() * (isMini ? 3 : 5);
-          const motoSpeed = (30 + flowRatio * 30 + Math.random() * 20) * catDef.speedFactor;
-          vehicles.push({
-            x: -catDef.width - Math.random() * 40,
-            lane: -1,
-            category: cat,
-            speed: motoSpeed,
-            state: 'departing', // motos go straight through, never stop
-            waitTimer: 0,
-            passedCount: false,
-            isMoto: true,
-            motoY,
-            stuckTimer: 0,
-          });
+          // Motos SALIDA: berma inferior, junto al último carril — izq→der
+          // En retorno: pocas motos salen (70% se rechazan → solo 30% del volumen normal)
+          const { isRetorno: isRetMode } = getOperationMode();
+          if (isRetMode && Math.random() < 0.70) {
+            // Skip this moto — en retorno pocas motos salen
+          } else {
+            const motoY = roadBot + (isMini ? 4 : 8) + Math.random() * (isMini ? 3 : 5);
+            const motoSpeed = (30 + flowRatio * 30 + Math.random() * 20) * catDef.speedFactor;
+            vehicles.push({
+              x: -catDef.width - Math.random() * 40,
+              lane: -1,
+              category: cat,
+              speed: motoSpeed,
+              state: 'departing',
+              waitTimer: 0,
+              passedCount: false,
+              isMoto: true,
+              motoY,
+              stuckTimer: 0,
+            });
+          }
         } else {
           const laneIdx = activeLanes[Math.floor(Math.random() * activeLanes.length)];
           const spawnSpeed = (approachSpeedBase + Math.random() * approachSpeedVar) * catDef.speedFactor;
@@ -455,6 +511,95 @@ export default function TollCanvas({
       }
       // Cap accumulator to prevent burst-spawning after tab-switch
       spawnAccRef.current = Math.min(spawnAccRef.current, 2);
+    }
+
+    // ── Spawn MOTOS RETORNO (siempre activas, berma superior junto a C1, der→izq) ──
+    // En operación retorno: mayor volumen entrando. En salida: menor volumen entrando.
+    {
+      const { isRetorno: isRetornoMode } = getOperationMode();
+      const numLanesNow = (currentLanes || []).length || 4;
+      const c1Y = laneY(0, roadTop, roadBot, numLanesNow);
+      const laneHNow = (roadBot - roadTop) / numLanesNow;
+
+      // Volumen motos retorno: mayor cuando es operación retorno
+      const motoRetornoFlow = isRetornoMode
+        ? (_isNight ? 0.06 : 0.18)  // Retorno: muchas motos entrando
+        : (_isNight ? 0.02 : 0.06); // Salida: pocas motos entrando
+
+      if (!window._motoRetornoAcc) window._motoRetornoAcc = 0;
+      window._motoRetornoAcc += motoRetornoFlow * dt;
+
+      const motoRetornoCount = vehicles.filter(v => v.isMoto && v.isCounter).length;
+      const MAX_MOTO_RETORNO = isRetornoMode ? (_isNight ? 3 : 6) : (_isNight ? 1 : 3);
+
+      while (window._motoRetornoAcc >= 1 && motoRetornoCount < MAX_MOTO_RETORNO) {
+        window._motoRetornoAcc -= 1;
+        const catDef = VEHICLE_CATEGORIES.M;
+        const motoY = c1Y - laneHNow * 0.5 - (isMini ? 2 : 4) - Math.random() * (isMini ? 2 : 3);
+        vehicles.push({
+          x: w + catDef.width + Math.random() * 80,
+          lane: 0,
+          category: 'M',
+          speed: 35 + Math.random() * 30,
+          state: 'departing',
+          waitTimer: 0,
+          passedCount: false,
+          isMoto: true,
+          isCounter: true,
+          motoY,
+          stuckTimer: 0,
+        });
+        if (vehicles.filter(v => v.isMoto && v.isCounter).length >= MAX_MOTO_RETORNO) break;
+      }
+      window._motoRetornoAcc = Math.min(window._motoRetornoAcc, 1.5);
+    }
+
+    // ── Spawn COUNTER-FLOW VEHICLES (vehículos en dirección opuesta, dentro de carriles) ──
+    const counterLanes = (currentLanes || []).filter(l => {
+      if (!l.active) return false;
+      const { isRetorno: isRet } = getOperationMode();
+      if (isRet) return l.direction === 'salida';
+      return l.direction === 'retorno' || l.direction === 'retorno-extra';
+    }).map(l => l.id - 1);
+
+    if (counterLanes.length > 0) {
+      const { isRetorno: isRetornoMode } = getOperationMode();
+      const counterFlowRatio = isRetornoMode ? 0.08 : 0.05;
+      const mainFlow = (currentMetrics.vehiclesHour || 60) / 3600;
+      const counterFlow = Math.max(mainFlow * counterFlowRatio, _isNight ? 0.015 : 0.035);
+      counterAccRef.current += counterFlow * dt;
+
+      const MAX_COUNTER = _isNight ? 3 : (isMini ? 4 : 8);
+      const counterCount = vehicles.filter(v => v.isCounter && !v.isMoto).length;
+
+      while (counterAccRef.current >= 1 && counterCount < MAX_COUNTER) {
+        counterAccRef.current -= 1;
+        // Solo vehículos (no motos, esas ya se spawnean arriba)
+        const nonMotoCategories = ['C1', 'C2', 'C3', 'C4', 'C5'];
+        const weights = [0.50, 0.15, 0.18, 0.10, 0.07];
+        let r = Math.random(), acc = 0, cat = 'C1';
+        for (let i = 0; i < nonMotoCategories.length; i++) {
+          acc += weights[i];
+          if (r < acc) { cat = nonMotoCategories[i]; break; }
+        }
+        const catDef = VEHICLE_CATEGORIES[cat];
+        const chosenLane = counterLanes[Math.floor(Math.random() * counterLanes.length)];
+
+        vehicles.push({
+          x: w + catDef.width + Math.random() * 120,
+          lane: chosenLane,
+          category: cat,
+          speed: 35 + Math.random() * 30,
+          state: 'departing',
+          waitTimer: 0,
+          passedCount: false,
+          isMoto: false,
+          isCounter: true,
+          stuckTimer: 0,
+        });
+        if (vehicles.filter(v => v.isCounter && !v.isMoto).length >= MAX_COUNTER) break;
+      }
+      counterAccRef.current = Math.min(counterAccRef.current, 1.5);
     }
 
     // ── Helper: find nearest vehicle ahead in same lane ──
@@ -477,7 +622,14 @@ export default function TollCanvas({
       const catDef = VEHICLE_CATEGORIES[v.category];
       if (!catDef) { vehicles.splice(i, 1); continue; }
 
-      // Motos travel straight through on the berma — no collision
+      // Counter-flow vehicles: travel RIGHT → LEFT, no booth interaction
+      if (v.isCounter) {
+        v.x -= v.speed * dt;
+        if (v.x < -80) vehicles.splice(i, 1);
+        continue;
+      }
+
+      // Motos (main direction) travel straight through on the berma — no collision
       if (v.isMoto) {
         v.x += v.speed * dt;
         if (v.x > w + 60) vehicles.splice(i, 1);
@@ -637,16 +789,28 @@ export default function TollCanvas({
 
   return (
     <div className="rounded-lg border overflow-hidden" style={{ backgroundColor: '#070d1a', borderColor: '#1a2d4a' }}>
-      {showHeader && (
-        <div className="flex items-center justify-between px-3 py-1.5 border-b" style={{ borderColor: '#1a2d4a' }}>
-          <span className="text-[10px] uppercase tracking-wider text-slate-500">
-            Gemelo Digital — Vista Cenital
-          </span>
-          <span className="text-[10px] font-mono" style={{ color: corridorColor }}>
-            {activeLanes}/{(lanes || []).length || 4} casetas activas
-          </span>
-        </div>
-      )}
+      {showHeader && (() => {
+        const { isRetorno } = getOperationMode();
+        const retornoLanes = (lanes || []).filter(l => l.active && (l.direction === 'retorno' || l.direction === 'retorno-extra')).length;
+        const salidaLanesCount = activeLanes - retornoLanes;
+        return (
+          <div className="flex items-center justify-between px-3 py-1.5 border-b" style={{ borderColor: '#1a2d4a' }}>
+            <div className="flex items-center gap-2">
+              <span className="text-[10px] uppercase tracking-wider text-slate-500">
+                Gemelo Digital — Vista Cenital
+              </span>
+              {isRetorno && (
+                <span className="text-[9px] font-mono px-1.5 py-0.5 rounded" style={{ background: 'rgba(251, 146, 60, 0.15)', color: '#fb923c', border: '1px solid rgba(251, 146, 60, 0.3)' }}>
+                  ← RETORNO · {retornoLanes} casetas
+                </span>
+              )}
+            </div>
+            <span className="text-[10px] font-mono" style={{ color: corridorColor }}>
+              {activeLanes}/{(lanes || []).length || 4} casetas activas
+            </span>
+          </div>
+        );
+      })()}
       <div style={{ height: CANVAS_H }}>
         <canvas ref={canvasRef} style={{ display: 'block', width: '100%', height: CANVAS_H }} />
       </div>

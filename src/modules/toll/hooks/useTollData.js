@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { HIGH_RISK_TOLLS, ALL_TOLL_STATIONS } from '../../../data/nexusCorridors';
-import { getOperationMode, getColombiaHour } from '../../../utils/operationMode';
+import { getOperationMode, getColombiaHour, getActiveBooths } from '../../../utils/operationMode';
 
 // ─── Lookup booth config from toll station data ───
 function getBoothConfig(stationId) {
@@ -157,21 +157,34 @@ function buildSnapshot(irt, stationId) {
   // ─── Generar N carriles dinámicos basados en boothConfig real ───
   // Layout físico: C1 y C2 son SIEMPRE casetas de retorno (entrada a Bogotá)
   // C3 en adelante son casetas de salida (salida de Bogotá)
-  // En modo SALIDA: C1 (y C2 si retorno > 1) cerrados, resto activos
-  // En modo RETORNO: C1 (y C2) activos, la mayoría del resto cerrados
+  // getActiveBooths() calcula progresivamente cuántas casetas habilitar
   const booth = getBoothConfig(stationId);
   const totalLaneCount = booth.total;
-  const retornoBooths = booth.retorno; // cuántas casetas son de retorno (siempre las primeras)
+  const { retornoActivas, salidaActivas } = getActiveBooths(booth);
 
   const lanes = [];
-  for (let i = 0; i < totalLaneCount; i++) {
-    const isRetornoBooth = i < retornoBooths; // C1, C2... son casetas de retorno
-    const isActive = isRetorno ? isRetornoBooth : !isRetornoBooth;
+  let retornoUsed = 0;
+  let salidaUsed = 0;
 
-    // En retorno, también activar algunas casetas de salida si hay muchas
-    // (INVÍAS puede habilitar casetas adicionales en festivos)
-    const isExtraActive = isRetorno && !isRetornoBooth && i < retornoBooths + Math.floor((totalLaneCount - retornoBooths) * 0.6);
-    const finalActive = isActive || isExtraActive;
+  for (let i = 0; i < totalLaneCount; i++) {
+    const isRetornoBooth = i < booth.retorno; // C1, C2... son casetas de retorno físicas
+
+    let finalActive;
+    if (isRetorno) {
+      // RETORNO: activar casetas de retorno (C1, C2...) + extras progresivamente
+      if (isRetornoBooth) {
+        finalActive = retornoUsed < retornoActivas;
+        retornoUsed++;
+      } else {
+        // Casetas extra de salida reconvertidas a retorno por demanda
+        const extrasNeeded = retornoActivas - booth.retorno;
+        finalActive = salidaUsed < extrasNeeded || salidaUsed < salidaActivas;
+        salidaUsed++;
+      }
+    } else {
+      // SALIDA: C1/C2 cerradas (retorno), el resto activas
+      finalActive = !isRetornoBooth;
+    }
 
     const activeLaneIndex = finalActive ? lanes.filter(l => l.active).length : -1;
     const isFacilPass = finalActive && activeLaneIndex < Math.ceil(booth.total * 0.25);
@@ -182,6 +195,9 @@ function buildSnapshot(irt, stationId) {
       ? clamp(Math.round(((irt - 28) / (10 + i) + rnd(1.5)) * queueFactor), 0, 8)
       : 0;
 
+    // En retorno, marcar si es caseta reconvertida
+    const laneDirection = isRetornoBooth ? 'retorno' : (isRetorno && finalActive && i >= booth.retorno && i < booth.retorno + (retornoActivas - booth.retorno)) ? 'retorno-extra' : 'salida';
+
     lanes.push({
       id: i + 1,
       label: `C${i + 1}`,
@@ -190,6 +206,7 @@ function buildSnapshot(irt, stationId) {
       active: finalActive,
       speed: laneSpeed,
       queue: laneQueue,
+      direction: laneDirection,
     });
   }
 

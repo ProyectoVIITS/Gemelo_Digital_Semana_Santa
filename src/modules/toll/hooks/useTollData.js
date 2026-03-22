@@ -1,7 +1,14 @@
 import { useState, useEffect, useRef } from 'react';
-import { HIGH_RISK_TOLLS } from '../../../data/nexusCorridors';
+import { HIGH_RISK_TOLLS, ALL_TOLL_STATIONS } from '../../../data/nexusCorridors';
+import { getOperationMode, getColombiaHour } from '../../../utils/operationMode';
 
-// Base IRT por peaje (ajusta con datos reales cuando estén disponibles)
+// ─── Lookup booth config from toll station data ───
+function getBoothConfig(stationId) {
+  const toll = ALL_TOLL_STATIONS.find(t => t.id === stationId);
+  return toll?.boothConfig || { total: 4, salida: 3, retorno: 1 };
+}
+
+// ─── Base IRT por peaje — SALIDA (tráfico alejándose de Bogotá) ───
 const BASE_IRT = {
   'C1-07': 58, 'C1-08': 45,
   'C2-03': 42,
@@ -12,35 +19,75 @@ const BASE_IRT = {
   'C7-03': 38,
 };
 
-// Perfil horario SEMANA SANTA — fin de semana largo
-// Patrón especial: salidas de Bogotá altamente ocupadas en todo el horario diurno (7am-8pm)
-// No solo picos AM/PM sino flujo sostenido alto durante el día
-// Fuente: análisis INVÍAS operación retorno / operación salida festivos
-const HOURLY_FLOW_PROFILE = [
+// ─── Base IRT por peaje — RETORNO (tráfico hacia Bogotá) ───
+// Los peajes cercanos a Bogotá se congestionan; los lejanos fluyen mejor
+const BASE_IRT_RETORNO = {
+  'C1-07': 48, 'C1-08': 62,    // Siberia: entrada occidental a Bogotá
+  'C2-03': 42,
+  'C3-01': 82, 'C3-02': 72,    // Chuzacá + Chinauta: embudos críticos → Bogotá
+  'C3-03': 45, 'C3-04': 40,    // Pubenza + Flandes: inicio retorno, fluido
+  'C4-02': 48, 'C4-03': 50,
+  'C5-01': 72, 'C5-02': 68,    // Naranjal + Cáqueza: entrada Llanos → Bogotá
+  'C6-01': 68, 'C6-02': 55,    // Albarracín + Tuta: entrada Boyacá → Bogotá
+  'C7-03': 38,
+};
+
+// ─── Perfil horario SALIDA (Semana Santa — fin de semana largo) ───
+const HOURLY_FLOW_PROFILE_SALIDA = [
 //  0     1     2     3     4     5     6     7     8     9    10    11
   0.12, 0.08, 0.06, 0.05, 0.08, 0.20, 0.55, 0.82, 0.92, 0.95, 0.90, 0.85,
 // 12    13    14    15    16    17    18    19    20    21    22    23
   0.88, 0.85, 0.82, 0.88, 0.92, 0.95, 0.90, 0.75, 0.50, 0.32, 0.22, 0.15,
 ];
 
-// Multiplicador Semana Santa (45% más tráfico en festivos, especialmente corredores turísticos)
-const SS_MULTIPLIER = 1.45;
+// ─── Perfil horario RETORNO (lunes festivo — regreso a ciudades) ───
+// Patrón real: madrugada tranquila, acumulación desde 10am, pico masivo 1pm-5pm
+// Fuente: patrones INVÍAS Operación Retorno festivos Colombia
+const HOURLY_FLOW_PROFILE_RETORNO = [
+//  0     1     2     3     4     5     6     7     8     9    10    11
+  0.06, 0.05, 0.04, 0.04, 0.06, 0.10, 0.20, 0.35, 0.50, 0.65, 0.78, 0.85,
+// 12    13    14    15    16    17    18    19    20    21    22    23
+  0.90, 0.95, 0.98, 1.00, 0.95, 0.88, 0.75, 0.58, 0.38, 0.22, 0.12, 0.08,
+];
 
-// Get Colombia hour (America/Bogota UTC-5) regardless of browser timezone
-function getColombiaHour() {
-  return parseInt(new Date().toLocaleString('en-US', { hour: 'numeric', hour12: false, timeZone: 'America/Bogota' }), 10);
-}
+// Multiplicadores Semana Santa
+const SS_MULTIPLIER_SALIDA = 1.45;
+const SS_MULTIPLIER_RETORNO = 1.50; // Retorno más concentrado en pocas horas
 
 function getHourlyFactor() {
   const hour = getColombiaHour();
-  return HOURLY_FLOW_PROFILE[hour] || 0.5;
+  const { isRetorno } = getOperationMode();
+  const profile = isRetorno ? HOURLY_FLOW_PROFILE_RETORNO : HOURLY_FLOW_PROFILE_SALIDA;
+  return profile[hour] || 0.5;
+}
+
+function getActiveProfile() {
+  const { isRetorno } = getOperationMode();
+  return {
+    flowProfile: isRetorno ? HOURLY_FLOW_PROFILE_RETORNO : HOURLY_FLOW_PROFILE_SALIDA,
+    ssMultiplier: isRetorno ? SS_MULTIPLIER_RETORNO : SS_MULTIPLIER_SALIDA,
+    baseIrtMap: isRetorno ? BASE_IRT_RETORNO : BASE_IRT,
+  };
 }
 
 const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
 const rnd = (range) => (Math.random() - 0.5) * range;
 
-function generateAlertMessage(irt) {
-  const msgs = irt > 70
+function generateAlertMessage(irt, isRetorno) {
+  const retornoMsgs = irt > 70
+    ? [
+        'Cola retorno > 10 veh detectada',
+        'Velocidad media < 30 km/h sentido Bogotá',
+        'Congestión severa en casetas de retorno',
+        'Vehículo averiado en calzada sentido capital',
+      ]
+    : [
+        `Cola moderada retorno: ${3 + Math.round(Math.random() * 4)} veh`,
+        'Flujo retorno aumentando: +22%',
+        'Casetas retorno operando al 85%',
+      ];
+
+  const salidaMsgs = irt > 70
     ? [
         'Cola > 8 veh detectada',
         'Velocidad media < 40 km/h',
@@ -52,43 +99,87 @@ function generateAlertMessage(irt) {
         `Cola moderada: ${3 + Math.round(Math.random() * 3)} veh`,
         'Flujo aumentando: +18%',
       ];
+
+  const msgs = isRetorno ? retornoMsgs : salidaMsgs;
   return msgs[Math.floor(Math.random() * msgs.length)];
 }
 
 function buildSnapshot(irt, stationId) {
+  const { isRetorno } = getOperationMode();
+  const { flowProfile, ssMultiplier } = getActiveProfile();
   const hourFactor = getHourlyFactor();
-  // Velocidad inversamente proporcional al IRT y a la hora pico
+  const hour = getColombiaHour();
+
   const speed = clamp(Math.round(90 - irt * 0.55 - hourFactor * 15 + rnd(8)), 15, 110);
-  // Flujo proporcional al perfil horario + factor IRT (más congestión = más vehículos intentando pasar)
-  const baseFlow = 80 + hourFactor * 480; // 80 en madrugada, 560 en hora pico
-  const flow = clamp(Math.round(baseFlow * SS_MULTIPLIER + irt * 1.2 + rnd(20)), 60, 680);
+  const baseFlow = 80 + hourFactor * 480;
+  const flow = clamp(Math.round(baseFlow * ssMultiplier + irt * 1.2 + rnd(20)), 60, 680);
   const occup = clamp(Math.round(irt * 0.65 + hourFactor * 25 + 8 + rnd(4)), 5, 95);
   const c4closed = irt > 82;
 
-  // SEMANA SANTA — fin de semana largo
-  // Colas significativas solo en horas pico: 6-8am y 15-17 (3-5pm)
-  // Colas moderadas en horario diurno (alta demanda sostenida en festivo)
-  // Sin cola en madrugada/noche
-  const hour = getColombiaHour();
-  const isPeakAM = hour >= 6 && hour <= 8;
-  const isPeakPM = hour >= 15 && hour <= 17;
-  const isPeak = isPeakAM || isPeakPM;
-  const queueFactor = isPeak ? 1.0
-    : (hour >= 9 && hour <= 14) ? 0.45   // Semana Santa: más cola durante el día
-    : (hour >= 18 && hour <= 20) ? 0.35  // tarde-noche: moderada
-    : 0.0;                                // madrugada/noche: sin cola
+  // ─── Colas: patrón diferente para SALIDA vs RETORNO ───
+  let queueFactor;
+  if (isRetorno) {
+    // RETORNO: pico masivo 1pm-5pm, acumulación desde 10am
+    const isPeakReturn = hour >= 13 && hour <= 17;
+    const isBuildUp = hour >= 10 && hour <= 12;
+    const isEvening = hour >= 18 && hour <= 20;
+    queueFactor = isPeakReturn ? 1.0
+      : isBuildUp ? 0.65
+      : isEvening ? 0.45
+      : 0.0;
+  } else {
+    // SALIDA: picos 6-8am y 3-5pm (sin cambios)
+    const isPeakAM = hour >= 6 && hour <= 8;
+    const isPeakPM = hour >= 15 && hour <= 17;
+    const isPeak = isPeakAM || isPeakPM;
+    queueFactor = isPeak ? 1.0
+      : (hour >= 9 && hour <= 14) ? 0.45
+      : (hour >= 18 && hour <= 20) ? 0.35
+      : 0.0;
+  }
 
-  const lanes = [
-    { id: 1, label: 'C1', type: 'FacilPass', status: 'active', active: true, speed: clamp(Math.round(speed + 8 + rnd(8)), 15, 110), queue: clamp(Math.round(((irt - 30) / 12 + rnd(1.5)) * queueFactor), 0, 8) },
-    { id: 2, label: 'C2', type: 'FacilPass', status: 'active', active: true, speed: clamp(Math.round(speed + 12 + rnd(6)), 15, 110), queue: clamp(Math.round(((irt - 35) / 14 + rnd(1.5)) * queueFactor), 0, 8) },
-    { id: 3, label: 'C3', type: 'Efectivo', status: 'active', active: true, speed: clamp(Math.round(speed - 5 + rnd(8)), 15, 110), queue: clamp(Math.round(((irt - 25) / 10 + rnd(2)) * queueFactor), 0, 8) },
-    { id: 4, label: 'C4', type: 'Efectivo', status: c4closed ? 'closed' : 'active', active: !c4closed, speed: c4closed ? 0 : clamp(Math.round(speed - 8 + rnd(6)), 15, 110), queue: 0 },
-  ];
+  // ─── Generar N carriles dinámicos basados en boothConfig real ───
+  // Layout físico: C1 y C2 son SIEMPRE casetas de retorno (entrada a Bogotá)
+  // C3 en adelante son casetas de salida (salida de Bogotá)
+  // En modo SALIDA: C1 (y C2 si retorno > 1) cerrados, resto activos
+  // En modo RETORNO: C1 (y C2) activos, la mayoría del resto cerrados
+  const booth = getBoothConfig(stationId);
+  const totalLaneCount = booth.total;
+  const retornoBooths = booth.retorno; // cuántas casetas son de retorno (siempre las primeras)
 
-  // Total vehículos acumulados del día, proporcional a la hora actual
-  const accumulatedFlow = HOURLY_FLOW_PROFILE.slice(0, hour + 1).reduce((s, f) => s + f * 560, 0);
+  const lanes = [];
+  for (let i = 0; i < totalLaneCount; i++) {
+    const isRetornoBooth = i < retornoBooths; // C1, C2... son casetas de retorno
+    const isActive = isRetorno ? isRetornoBooth : !isRetornoBooth;
+
+    // En retorno, también activar algunas casetas de salida si hay muchas
+    // (INVÍAS puede habilitar casetas adicionales en festivos)
+    const isExtraActive = isRetorno && !isRetornoBooth && i < retornoBooths + Math.floor((totalLaneCount - retornoBooths) * 0.6);
+    const finalActive = isActive || isExtraActive;
+
+    const activeLaneIndex = finalActive ? lanes.filter(l => l.active).length : -1;
+    const isFacilPass = finalActive && activeLaneIndex < Math.ceil(booth.total * 0.25);
+    const laneSpeed = finalActive
+      ? clamp(Math.round(speed + (isFacilPass ? 10 : -3) + rnd(8)), 15, 110)
+      : 0;
+    const laneQueue = finalActive
+      ? clamp(Math.round(((irt - 28) / (10 + i) + rnd(1.5)) * queueFactor), 0, 8)
+      : 0;
+
+    lanes.push({
+      id: i + 1,
+      label: `C${i + 1}`,
+      type: isFacilPass ? 'FacilPass' : 'Efectivo',
+      status: finalActive ? 'active' : 'closed',
+      active: finalActive,
+      speed: laneSpeed,
+      queue: laneQueue,
+    });
+  }
+
+  const accumulatedFlow = flowProfile.slice(0, hour + 1).reduce((s, f) => s + f * 560, 0);
   const metrics = {
-    vehiclesTotal: Math.round(accumulatedFlow * SS_MULTIPLIER + rnd(50)),
+    vehiclesTotal: Math.round(accumulatedFlow * ssMultiplier + rnd(50)),
     vehiclesHour: flow,
     avgSpeed: speed,
     occupancy: occup,
@@ -97,13 +188,11 @@ function buildSnapshot(irt, stationId) {
     timestamp: new Date(),
   };
 
-  // Historial inicial: últimas 2h con curva basada en perfil horario real
   const now = new Date();
   const speedHistory = Array.from({ length: 24 }, (_, i) => {
     const t = new Date(now.getTime() - (23 - i) * 5 * 60 * 1000);
     const pastHour = t.getHours();
-    const hf = HOURLY_FLOW_PROFILE[pastHour] || 0.5;
-    // En horas pico la velocidad baja, en valles sube
+    const hf = flowProfile[pastHour] || 0.5;
     const s = clamp(Math.round(95 - hf * 40 - irt * 0.3 + rnd(8)), 20, 110);
     return {
       time: t.toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit', hour12: false, timeZone: 'America/Bogota' }),
@@ -129,8 +218,10 @@ function updateHistory(prev, irt) {
 }
 
 export default function useTollData(stationId, corridorId) {
-  const baseIRT = BASE_IRT[stationId] ?? 40;
+  const { baseIrtMap } = getActiveProfile();
+  const baseIRT = baseIrtMap[stationId] ?? 40;
   const isHighRisk = HIGH_RISK_TOLLS.includes(stationId);
+  const { isRetorno } = getOperationMode();
 
   const [data, setData] = useState(() => buildSnapshot(baseIRT, stationId));
   const alertIdRef = useRef(0);
@@ -147,7 +238,7 @@ export default function useTollData(stationId, corridorId) {
           newAlerts.push({
             id: `t-${(++alertIdRef.current) % 100000}-${Date.now().toString(36)}`,
             severity: irt > 70 ? 'critical' : 'warning',
-            message: generateAlertMessage(irt),
+            message: generateAlertMessage(irt, isRetorno),
             timestamp: new Date(),
             resolved: false,
             source: Math.random() > 0.5 ? 'CCTV' : 'CONTEO',
@@ -164,7 +255,7 @@ export default function useTollData(stationId, corridorId) {
     }, 1800);
 
     return () => clearInterval(id);
-  }, [baseIRT, stationId, isHighRisk]);
+  }, [baseIRT, stationId, isHighRisk, isRetorno]);
 
   return data;
 }

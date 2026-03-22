@@ -7,6 +7,7 @@ import { Link } from 'react-router-dom';
 import { ChevronRight, AlertTriangle } from 'lucide-react';
 import useTollData from '../../toll/hooks/useTollData';
 import TollCanvas from '../../toll/components/TollCanvas';
+import { getOperationMode } from '../../../utils/operationMode';
 
 export default function TollStationCard({ corridor, toll }) {
   // ★ Cada tarjeta tiene su propio hook — datos independientes por peaje
@@ -53,6 +54,7 @@ export default function TollStationCard({ corridor, toll }) {
         metrics={data.metrics}
         showHeader={false}
         showMetrics={true}
+        direction={getOperationMode().mode}
       />
 
       {/* Vista satelital del peaje */}

@@ -29,8 +29,8 @@ function pickCategory() {
   return 'C1';
 }
 
-function laneY(laneIdx, roadTop, roadBot) {
-  const laneH = (roadBot - roadTop) / 4;
+function laneY(laneIdx, roadTop, roadBot, totalLanes = 4) {
+  const laneH = (roadBot - roadTop) / totalLanes;
   return roadTop + laneH * laneIdx + laneH * 0.5;
 }
 
@@ -42,6 +42,7 @@ export default function TollCanvas({
   metrics = {},
   showHeader = true,
   showMetrics = true,
+  direction = 'salida', // 'salida' | 'retorno'
 }) {
   const CANVAS_H = mode === 'mini' ? 180 : 340;
   const MAX_VEHICLES = mode === 'mini' ? 18 : 35;
@@ -59,14 +60,15 @@ export default function TollCanvas({
   const flashRef = useRef([]);
   const dataRef = useRef({ lanes, metrics });
 
-  useEffect(() => { dataRef.current = { lanes, metrics }; }, [lanes, metrics]);
+  useEffect(() => { dataRef.current = { lanes, metrics, direction }; }, [lanes, metrics, direction]);
 
   const draw = useCallback((ctx, timestamp) => {
     const { w, h } = sizeRef.current;
     const { lanes: currentLanes, metrics: currentMetrics } = dataRef.current;
     const roadTop = h * ROAD_Y_START;
     const roadBot = h * ROAD_Y_END;
-    const laneH = (roadBot - roadTop) / 4;
+    const numLanes = (currentLanes || []).length || 4;
+    const laneH = (roadBot - roadTop) / numLanes;
     const isMini = mode === 'mini';
 
     // Background
@@ -97,7 +99,7 @@ export default function TollCanvas({
     ctx.strokeStyle = 'rgba(255,255,255,0.12)';
     ctx.setLineDash([16, 12]);
     ctx.lineWidth = 1;
-    for (let i = 1; i < 4; i++) {
+    for (let i = 1; i < numLanes; i++) {
       const y = roadTop + laneH * i;
       ctx.beginPath();
       ctx.moveTo(0, y);
@@ -111,9 +113,22 @@ export default function TollCanvas({
       ctx.fillStyle = 'rgba(255,255,255,0.06)';
       ctx.font = '18px JetBrains Mono, monospace';
       ctx.textAlign = 'center';
-      for (let i = 0; i < 4; i++) {
-        ctx.fillText('80', w * 0.12, laneY(i, roadTop, roadBot) + 6);
+      for (let i = 0; i < numLanes; i++) {
+        ctx.fillText('80', w * 0.12, laneY(i, roadTop, roadBot, numLanes) + 6);
       }
+    }
+
+    // Direction indicator (Operación Retorno / Salida)
+    if (!isMini) {
+      const isRetorno = dataRef.current.direction === 'retorno';
+      const arrowLabel = isRetorno ? '\u2190 RETORNO A BOGOT\u00C1' : '\u2192 SALIDA';
+      const arrowColor = isRetorno ? '#f59e0b' : '#22c55e';
+      ctx.fillStyle = arrowColor;
+      ctx.font = 'bold 10px JetBrains Mono, monospace';
+      ctx.textAlign = 'left';
+      ctx.globalAlpha = 0.75;
+      ctx.fillText(arrowLabel, 12, roadTop - 22);
+      ctx.globalAlpha = 1;
     }
 
     // Count line
@@ -191,12 +206,14 @@ export default function TollCanvas({
       ctx.fillText('CCTV', gantryX + 16, iconY - 3);
     }
 
-    // Toll Booths
-    for (let i = 0; i < 4; i++) {
+    // Toll Booths — dynamic size based on lane count
+    const dynBoothH = numLanes > 6 ? (isMini ? 8 : Math.min(14, laneH * 0.6)) : BOOTH_H;
+    const dynBoothW = numLanes > 6 ? (isMini ? 16 : Math.min(26, BOOTH_W)) : BOOTH_W;
+    for (let i = 0; i < numLanes; i++) {
       const lane = currentLanes[i];
       if (!lane) continue;
-      const y = laneY(i, roadTop, roadBot) - BOOTH_H / 2;
-      const x = gantryX - BOOTH_W / 2;
+      const y = laneY(i, roadTop, roadBot, numLanes) - dynBoothH / 2;
+      const x = gantryX - dynBoothW / 2;
       const isClosed = lane.status === 'closed' || !lane.active;
 
       let fillColor, borderColor;
@@ -212,22 +229,23 @@ export default function TollCanvas({
       ctx.strokeStyle = borderColor;
       ctx.lineWidth = 1.5;
       ctx.beginPath();
-      ctx.roundRect(x, y, BOOTH_W, BOOTH_H, isMini ? 2 : 4);
+      ctx.roundRect(x, y, dynBoothW, dynBoothH, isMini ? 2 : (numLanes > 6 ? 2 : 4));
       ctx.fill();
       ctx.stroke();
 
       // Lane label
       ctx.fillStyle = isClosed ? '#64748b' : '#e2e8f0';
-      ctx.font = `bold ${isMini ? '8' : '10'}px JetBrains Mono, monospace`;
+      const labelSize = numLanes > 8 ? '7' : numLanes > 6 ? '8' : (isMini ? '8' : '10');
+      ctx.font = `bold ${labelSize}px JetBrains Mono, monospace`;
       ctx.textAlign = 'center';
-      ctx.fillText(lane.label, gantryX, y + BOOTH_H / 2 + (isMini ? 2 : 3));
+      ctx.fillText(lane.label, gantryX, y + dynBoothH / 2 + (isMini ? 2 : 3));
 
-      // Gate bar (full mode)
-      if (!isClosed && !isMini) {
+      // Gate bar (full mode, skip for dense layouts)
+      if (!isClosed && !isMini && numLanes <= 8) {
         const gateOpen = lane.queue <= 1;
         const gateAngle = gateOpen ? -Math.PI / 3 : 0;
-        const gateStartX = x + BOOTH_W + 2;
-        const gateStartY = y + BOOTH_H / 2;
+        const gateStartX = x + dynBoothW + 2;
+        const gateStartY = y + dynBoothH / 2;
         ctx.save();
         ctx.translate(gateStartX, gateStartY);
         ctx.rotate(gateAngle);
@@ -254,7 +272,7 @@ export default function TollCanvas({
     for (const v of vehicles) {
       const cat = VEHICLE_CATEGORIES[v.category];
       if (!cat) continue;
-      const cy = v.isMoto ? v.motoY : laneY(v.lane, roadTop, roadBot);
+      const cy = v.isMoto ? v.motoY : laneY(v.lane, roadTop, roadBot, numLanes);
       const vw = isMini ? cat.width * 0.65 : cat.width;
       const vh = isMini ? cat.height * 0.65 : cat.height;
 
@@ -292,10 +310,10 @@ export default function TollCanvas({
 
     // HUD Overlays
     if (!isMini) {
-      for (let i = 0; i < 4; i++) {
+      for (let i = 0; i < numLanes; i++) {
         const lane = currentLanes[i];
         if (!lane || lane.status === 'closed' || !lane.active) continue;
-        const cy = laneY(i, roadTop, roadBot);
+        const cy = laneY(i, roadTop, roadBot, numLanes);
         const hudX = gantryX + 50;
         const hudY = cy - 14;
 
@@ -349,6 +367,7 @@ export default function TollCanvas({
     const { lanes: currentLanes, metrics: currentMetrics } = dataRef.current;
     const roadTop = h * ROAD_Y_START;
     const roadBot = h * ROAD_Y_END;
+    const numLanes = (currentLanes || []).length || 4;
     const dt = deltaMs / 1000;
     const vehicles = vehiclesRef.current;
     const gantryX = w * GANTRY_X;
@@ -406,13 +425,27 @@ export default function TollCanvas({
       spawnAccRef.current = Math.min(spawnAccRef.current, 2);
     }
 
+    // ── Helper: find nearest vehicle ahead in same lane ──
+    function nearestAhead(v) {
+      let minX = Infinity;
+      for (const o of vehicles) {
+        if (o === v || o.isMoto || o.lane !== v.lane) continue;
+        if (o.x > v.x && o.x < minX) minX = o.x;
+      }
+      return minX;
+    }
+
+    // Colombia hour for peak detection (cached per frame)
+    const hour = parseInt(new Date().toLocaleString('en-US', { hour: 'numeric', hour12: false, timeZone: 'America/Bogota' }), 10);
+    const isPeakHour = (hour >= 6 && hour <= 8) || (hour >= 13 && hour <= 17);
+
     // ── Update vehicles ──
     for (let i = vehicles.length - 1; i >= 0; i--) {
       const v = vehicles[i];
       const catDef = VEHICLE_CATEGORIES[v.category];
       if (!catDef) { vehicles.splice(i, 1); continue; }
 
-      // Motos just travel straight through on the berma
+      // Motos travel straight through on the berma — no collision
       if (v.isMoto) {
         v.x += v.speed * dt;
         if (v.x > w + 60) vehicles.splice(i, 1);
@@ -421,68 +454,68 @@ export default function TollCanvas({
 
       const lane = currentLanes?.[v.lane];
       const boothX = gantryX - BOOTH_W / 2;
+      const MIN_GAP = catDef.width + 8; // minimum gap between vehicles (solid, no overlap)
 
-      // ── Anti-freeze: detect stuck vehicles and force them through ──
+      // ── Anti-freeze: detect stuck vehicles ──
       const prevX = v._prevX || v.x;
-      if (Math.abs(v.x - prevX) < 0.5 && v.state !== 'at-booth') {
+      if (Math.abs(v.x - prevX) < 0.3 && v.state !== 'at-booth') {
         v.stuckTimer = (v.stuckTimer || 0) + dt;
-        // If stuck for more than 4 seconds (not at booth), force departure
-        if (v.stuckTimer > 4) {
-          v.state = 'departing';
-          v.speed = 30;
-          v.stuckTimer = 0;
-        }
+        if (v.stuckTimer > 5) { v.state = 'departing'; v.speed = 30; v.stuckTimer = 0; }
       } else {
         v.stuckTimer = 0;
       }
       v._prevX = v.x;
 
-      // Use queue data only during peak hours — canvas-level check (Colombia time)
-      const hour = parseInt(new Date().toLocaleString('en-US', { hour: 'numeric', hour12: false, timeZone: 'America/Bogota' }), 10);
-      const isPeakHour = (hour >= 6 && hour <= 8) || (hour >= 15 && hour <= 17);
       const laneQueue = lane ? lane.queue : 0;
       const effectiveQueue = isPeakHour ? laneQueue : Math.min(laneQueue, 1);
+      const aheadX = nearestAhead(v);
+      const gapToAhead = aheadX - v.x;
 
       switch (v.state) {
         case 'approaching': {
-          const ahead = vehicles.filter(o => o.lane === v.lane && o.x > v.x && o.x < boothX && !o.isMoto && o !== v);
-          const stopX = ahead.length > 0
-            ? Math.min(...ahead.map(o => o.x)) - catDef.width - 6
-            : boothX - catDef.width / 2 - 4;
+          const distToBooth = boothX - v.x;
 
-          if (v.x + catDef.width / 2 >= stopX && effectiveQueue > 1 && ahead.length > 0) {
-            v.state = 'queued';
-            v.speed = 0;
-          } else if (v.x + catDef.width / 2 >= boothX - 4) {
+          // ── Collision prevention: brake if too close to vehicle ahead ──
+          if (gapToAhead < MIN_GAP * 2.5 && gapToAhead > 0) {
+            // Smooth braking: decelerate proportionally to gap
+            const brakeFactor = Math.max(0, (gapToAhead - MIN_GAP) / (MIN_GAP * 1.5));
+            v.speed = Math.max(5, v.speed * (0.85 + 0.15 * brakeFactor));
+            v.x += v.speed * brakeFactor * dt;
+
+            // Hard stop if about to overlap
+            if (gapToAhead <= MIN_GAP) {
+              v.speed = 0;
+              if (effectiveQueue > 1) { v.state = 'queued'; }
+            }
+          } else if (distToBooth <= catDef.width / 2 + 4) {
+            // Arrived at booth
             v.state = 'at-booth';
             v.speed = 0;
-            // Shorter wait during valley hours for fluid movement
             const baseWait = lane?.type === 'FacilPass' ? 0.4 + Math.random() * 0.4 : 0.8 + Math.random() * 0.6;
             v.waitTimer = isPeakHour ? baseWait * 1.5 : baseWait;
           } else {
-            const dist = boothX - v.x;
-            const factor = dist < 100 ? 0.3 + 0.7 * (dist / 100) : 1;
-            v.x += v.speed * factor * dt;
+            // ── Smooth deceleration curve approaching booth ──
+            const approachFactor = distToBooth < 150 ? 0.25 + 0.75 * (distToBooth / 150) : 1;
+            v.x += v.speed * approachFactor * dt;
           }
 
           if (!v.passedCount && v.x >= countLineX) {
             v.passedCount = true;
-            flashRef.current.push({ y: laneY(v.lane, roadTop, roadBot), time: performance.now() });
+            flashRef.current.push({ y: laneY(v.lane, roadTop, roadBot, numLanes), time: performance.now() });
           }
           break;
         }
         case 'queued': {
-          const aheadQ = vehicles.filter(o => o.lane === v.lane && o.x > v.x && !o.isMoto && o !== v);
-          if (aheadQ.length === 0) {
-            // No vehicles ahead — advance to booth
+          if (aheadX === Infinity) {
+            // Nothing ahead — advance to booth
             v.state = 'approaching';
             v.speed = 20;
-          } else {
-            const nearest = Math.min(...aheadQ.map(o => o.x));
-            if (nearest - v.x > catDef.width + 10) {
-              v.x += 18 * dt; // slightly faster creep
-            }
+          } else if (gapToAhead > MIN_GAP + 6) {
+            // Creep forward keeping safe gap
+            const creepSpeed = Math.min(15, (gapToAhead - MIN_GAP) * 2);
+            v.x += creepSpeed * dt;
           }
+          // else: stay put, gap too small
           break;
         }
         case 'at-booth':
@@ -498,7 +531,6 @@ export default function TollCanvas({
           if (v.x > w + 60) vehicles.splice(i, 1);
           break;
         default:
-          // Unknown state — force departure to prevent freeze
           v.state = 'departing';
           v.speed = 40;
           break;
@@ -578,7 +610,7 @@ export default function TollCanvas({
             Gemelo Digital — Vista Cenital
           </span>
           <span className="text-[10px] font-mono" style={{ color: corridorColor }}>
-            {activeLanes}/4 carriles activos
+            {activeLanes}/{(lanes || []).length || 4} casetas activas
           </span>
         </div>
       )}

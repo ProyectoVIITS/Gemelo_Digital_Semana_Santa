@@ -10,6 +10,7 @@ import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContai
 import { getCorridorById, getIRTLevel } from '../../data/nexusCorridors';
 import { useCorridorData } from '../../hooks/useCorridorData';
 import { useGlobalAlerts } from '../../hooks/useGlobalAlerts';
+import { getOperationMode, CRITICAL_RETURN_CORRIDORS } from '../../utils/operationMode';
 import { useAccidentData } from '../../hooks/useAccidentData';
 import { getNivelRiesgo, RIESGO_COLORS, RIESGO_LABELS } from '../../data/accidentUtils';
 import TollStationCard from './components/TollStationCard';
@@ -34,11 +35,22 @@ function CorridorHeader({ corridor, data, clock }) {
           style={{ background: `linear-gradient(135deg, ${corridor.color}, ${corridor.color}88)` }}>
           <Shield className="w-4 h-4 text-white" />
         </div>
-        <div>
+        <div className="flex items-center gap-2">
           <span className="text-sm font-bold tracking-wide" style={{ color: corridor.color, fontFamily: 'JetBrains Mono, monospace' }}>
             {corridor.shortName}
           </span>
-          <span className="text-[10px] text-slate-500 ml-2 hidden lg:inline">{corridor.route}</span>
+          {(() => {
+            const { isRetorno } = getOperationMode();
+            if (!isRetorno) return <span className="text-[10px] text-slate-500 hidden lg:inline">{corridor.route}</span>;
+            const isCritical = CRITICAL_RETURN_CORRIDORS.includes(corridor.id);
+            const badgeColor = isCritical ? '#ef4444' : '#f59e0b';
+            return (
+              <span className="text-[8px] font-mono font-bold px-1.5 py-0.5 rounded animate-pulse"
+                style={{ backgroundColor: `${badgeColor}18`, color: badgeColor, border: `1px solid ${badgeColor}44` }}>
+                {isCritical ? 'RETORNO CRÍTICO' : 'RETORNO'}
+              </span>
+            );
+          })()}
         </div>
       </div>
 

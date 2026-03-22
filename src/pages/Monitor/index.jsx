@@ -8,6 +8,7 @@ import { MapContainer, TileLayer, Polyline, CircleMarker, Tooltip as LTooltip, u
 import { ArrowLeft, Shield, Wifi, Activity, AlertTriangle, Gauge, ChevronRight, Radio, TrendingUp, Car, BarChart2 } from 'lucide-react';
 import { LineChart, Line, AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import { NEXUS_CORRIDORS, getIRTLevel, TOTAL_TOLL_STATIONS, CORRIDOR_COLORS } from '../../data/nexusCorridors';
+import { getOperationMode } from '../../utils/operationMode';
 import { useCorridorData } from '../../hooks/useCorridorData';
 import { useGlobalAlerts } from '../../hooks/useGlobalAlerts';
 import { useAccidentData } from '../../hooks/useAccidentData';
@@ -36,11 +37,21 @@ function MonitorHeader({ globalMetrics, clock }) {
           style={{ background: 'linear-gradient(135deg, #0ea5e9, #6366f1)' }}>
           <Shield className="w-4 h-4" />
         </div>
-        <div>
+        <div className="flex items-center gap-2">
           <span className="text-sm font-bold tracking-wide" style={{ color: '#0ea5e9', fontFamily: 'JetBrains Mono, Space Mono, monospace' }}>
             VIITS NEXUS
           </span>
-          <span className="text-[10px] text-slate-500 ml-2 hidden lg:inline">Monitor Semana Santa 2026</span>
+          {(() => {
+            const { isRetorno, label } = getOperationMode();
+            return isRetorno ? (
+              <span className="text-[9px] font-mono font-bold px-2 py-0.5 rounded animate-pulse"
+                style={{ backgroundColor: 'rgba(245, 158, 11, 0.15)', color: '#f59e0b', border: '1px solid rgba(245, 158, 11, 0.3)' }}>
+                OPERACIÓN RETORNO
+              </span>
+            ) : (
+              <span className="text-[10px] text-slate-500 hidden lg:inline">{label}</span>
+            );
+          })()}
         </div>
       </div>
 

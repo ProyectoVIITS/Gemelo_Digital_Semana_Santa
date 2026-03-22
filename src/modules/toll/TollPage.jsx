@@ -10,6 +10,7 @@ import { getCorridorById, getIRTLevel } from '../../data/nexusCorridors';
 import useTollData from './hooks/useTollData';
 import TollCanvas from './components/TollCanvas';
 import LoadingScreen from '../../components/shared/LoadingScreen';
+import { getOperationMode } from '../../utils/operationMode';
 
 const CARD = { backgroundColor: 'rgba(13, 26, 46, 0.6)', borderColor: '#1a2d4a' };
 
@@ -332,6 +333,7 @@ export default function TollPage() {
               metrics={data.metrics}
               showHeader={true}
               showMetrics={false}
+              direction={getOperationMode().mode}
             />
 
             <SensorPanel metrics={data.metrics} corridorColor={corridor.color} speedLimit={toll.speedLimit} />

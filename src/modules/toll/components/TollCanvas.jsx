@@ -15,14 +15,23 @@ const VEHICLE_CATEGORIES = {
 };
 
 // Distribución realista para carreteras nacionales de Colombia
-// Motos ~30% del tráfico total pero NO pagan peaje (pasan por la berma/lateral)
+// Motos ~30% del tráfico diurno pero casi nulas de noche (10% o menos)
 // C1 autos ~42%, C2 buses ~8%, C3 camiones 2E ~12%, C4 camiones 3E ~5%, C5 pesados ~3%
-const CATEGORY_WEIGHTS = { M: 0.30, C1: 0.42, C2: 0.08, C3: 0.12, C4: 0.05, C5: 0.03 };
+const CATEGORY_WEIGHTS_DAY   = { M: 0.28, C1: 0.42, C2: 0.08, C3: 0.13, C4: 0.06, C5: 0.03 };
+const CATEGORY_WEIGHTS_NIGHT = { M: 0.06, C1: 0.48, C2: 0.05, C3: 0.22, C4: 0.12, C5: 0.07 };
+// Noche: más camiones (transporte de carga nocturno), casi sin motos
+
+function getColHour() {
+  return parseInt(new Date().toLocaleString('en-US', { hour: 'numeric', hour12: false, timeZone: 'America/Bogota' }), 10);
+}
 
 function pickCategory() {
+  const hour = getColHour();
+  const isNight = hour >= 20 || hour <= 5;
+  const weights = isNight ? CATEGORY_WEIGHTS_NIGHT : CATEGORY_WEIGHTS_DAY;
   const r = Math.random();
   let c = 0;
-  for (const [cat, w] of Object.entries(CATEGORY_WEIGHTS)) {
+  for (const [cat, w] of Object.entries(weights)) {
     c += w;
     if (r <= c) return cat;
   }
@@ -45,7 +54,12 @@ export default function TollCanvas({
   direction = 'salida', // 'salida' | 'retorno'
 }) {
   const CANVAS_H = mode === 'mini' ? 180 : 340;
-  const MAX_VEHICLES = mode === 'mini' ? 18 : 35;
+  // MAX_VEHICLES adapts to time: fewer at night to prevent visual clutter
+  const _colHour = getColHour();
+  const _isNight = _colHour >= 20 || _colHour <= 5;
+  const MAX_VEHICLES = _isNight
+    ? (mode === 'mini' ? 6 : 12)    // night: sparse, max 12 vehicles visible
+    : (mode === 'mini' ? 18 : 35);  // day: normal density
   const ROAD_Y_START = 0.22;
   const ROAD_Y_END = 0.82;
   const COUNT_LINE_X = 0.28;
@@ -377,11 +391,18 @@ export default function TollCanvas({
     // ── Spawn vehicles — accumulator pattern (NEVER stops) ──
     const activeLanes = (currentLanes || []).filter(l => l.status !== 'closed' && l.active).map(l => l.id - 1);
     if (activeLanes.length > 0) {
-      // Minimum visual spawn: at least 1 vehicle every ~1.5s even at 0 flow
-      // This ensures the simulation NEVER appears frozen
-      const rawFlow = (currentMetrics.vehiclesHour || 300) / 3600;
-      const minVisualFlow = isMini ? 0.4 : 0.7; // vehicles/sec minimum for visual continuity
-      const effectiveFlow = Math.max(rawFlow * activeLanes.length, minVisualFlow);
+      // ── Spawn rate proportional to REAL flow (per station, NOT per lane) ──
+      // vehiclesHour is TOTAL for the station (all lanes combined)
+      // 22:00 valley: ~30-50 veh/h → 0.008-0.014 veh/s → 1 vehicle every 70-120s
+      // 08:00 peak:   ~500 veh/h  → 0.14 veh/s → 1 vehicle every 7s
+      // Minimum visual: 1 vehicle every ~8s at night (keeps road alive but sparse)
+      const hour = getColHour();
+      const isNightTime = hour >= 20 || hour <= 5;
+      const rawFlow = (currentMetrics.vehiclesHour || 60) / 3600; // per STATION total
+      const minVisualFlow = isNightTime
+        ? (isMini ? 0.06 : 0.12)   // night: ~1 veh every 8s (very sparse)
+        : (isMini ? 0.15 : 0.25);  // day: ~1 veh every 4s minimum
+      const effectiveFlow = Math.max(rawFlow, minVisualFlow); // DO NOT multiply by lanes
 
       // Accumulate fractional spawns to guarantee eventual spawn
       spawnAccRef.current += effectiveFlow * dt;
@@ -391,14 +412,24 @@ export default function TollCanvas({
         const cat = pickCategory();
         const catDef = VEHICLE_CATEGORIES[cat];
 
+        // ── Speed based on real flow: valley = slow approach, peak = faster ──
+        const vehHour = currentMetrics.vehiclesHour || 100;
+        const flowRatio = Math.min(vehHour / 600, 1); // 0 = empty, 1 = saturated
+        // Valley (22h, ~40 veh/h): approach at 25-40 km/h → calm, sparse
+        // Peak (8h, ~500 veh/h): approach at 35-60 km/h → dense, faster arrival
+        const approachSpeedBase = 25 + flowRatio * 20; // 25-45 range
+        const approachSpeedVar = 8 + flowRatio * 12;   // 8-20 variance
+
         if (catDef.isMoto) {
           // Motos pasan solo por la berma inferior (lateral de C4) — no pagan peaje
+          // En valle: motos más lentas (30-50 km/h), en pico: 50-80 km/h
           const motoY = roadBot + (isMini ? 4 : 8) + Math.random() * (isMini ? 3 : 5);
+          const motoSpeed = (30 + flowRatio * 30 + Math.random() * 20) * catDef.speedFactor;
           vehicles.push({
             x: -catDef.width - Math.random() * 40,
             lane: -1,
             category: cat,
-            speed: (55 + Math.random() * 50) * catDef.speedFactor,
+            speed: motoSpeed,
             state: 'departing', // motos go straight through, never stop
             waitTimer: 0,
             passedCount: false,
@@ -408,11 +439,12 @@ export default function TollCanvas({
           });
         } else {
           const laneIdx = activeLanes[Math.floor(Math.random() * activeLanes.length)];
+          const spawnSpeed = (approachSpeedBase + Math.random() * approachSpeedVar) * catDef.speedFactor;
           vehicles.push({
-            x: -catDef.width - Math.random() * 40,
+            x: -catDef.width - Math.random() * 60,
             lane: laneIdx,
             category: cat,
-            speed: (40 + Math.random() * 40) * catDef.speedFactor,
+            speed: spawnSpeed,
             state: 'approaching',
             waitTimer: 0,
             passedCount: false,
@@ -526,7 +558,8 @@ export default function TollCanvas({
           }
           break;
         case 'departing':
-          v.speed = Math.min(v.speed + 70 * dt, 130);
+          // Aceleración realista post-peaje: 0→60 km/h gradual, no salto a 130
+          v.speed = Math.min(v.speed + 45 * dt, 70);
           v.x += v.speed * dt;
           if (v.x > w + 60) vehicles.splice(i, 1);
           break;

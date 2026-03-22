@@ -74,33 +74,34 @@ const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
 const rnd = (range) => (Math.random() - 0.5) * range;
 
 function generateAlertMessage(irt, isRetorno) {
-  const retornoMsgs = irt > 70
+  // Solo mensajes que reflejan situaciones REALES en horas pico
+  const criticalMsgs = isRetorno
     ? [
-        'Cola retorno > 10 veh detectada',
-        'Velocidad media < 30 km/h sentido Bogotá',
-        'Congestión severa en casetas de retorno',
-        'Vehículo averiado en calzada sentido capital',
+        'Cola retorno > 10 veh en caseta principal',
+        'Velocidad media < 25 km/h sentido Bogotá',
+        'Congestión severa — casetas retorno al 95%',
+        'Vehículo detenido en calzada — carril parcialmente bloqueado',
       ]
     : [
-        `Cola moderada retorno: ${3 + Math.round(Math.random() * 4)} veh`,
-        'Flujo retorno aumentando: +22%',
-        'Casetas retorno operando al 85%',
+        'Cola > 8 vehículos en caseta de efectivo',
+        'Velocidad promedio < 20 km/h — congestión alta',
+        'Incidente menor reportado por CCTV en zona de aproximación',
+        'Vehículo pesado detenido en caseta — revisión de carga',
       ];
 
-  const salidaMsgs = irt > 70
+  const warningMsgs = isRetorno
     ? [
-        'Cola > 8 veh detectada',
-        'Velocidad media < 40 km/h',
-        'Incidente reportado por CCTV',
-        'Vehículo averiado en calzada',
+        `Cola moderada retorno: ${3 + Math.round(Math.random() * 4)} vehículos`,
+        'Casetas retorno operando al 85% de capacidad',
+        `Vehículo categoría C5 en revisión — ${Math.round(30 + Math.random() * 8)}t detectadas`,
       ]
     : [
-        `Vehículo sobrepeso: ${(30 + Math.random() * 14).toFixed(1)}t (límite: 32t)`,
-        `Cola moderada: ${3 + Math.round(Math.random() * 3)} veh`,
-        'Flujo aumentando: +18%',
+        `Cola en formación: ${3 + Math.round(Math.random() * 3)} vehículos en caseta efectivo`,
+        `Vehículo sobrepeso detectado: ${(30 + Math.random() * 14).toFixed(1)}t (límite: 32t)`,
+        'Casetas operando al 80% de capacidad — monitoreo activo',
       ];
 
-  const msgs = isRetorno ? retornoMsgs : salidaMsgs;
+  const msgs = irt > 70 ? criticalMsgs : warningMsgs;
   return msgs[Math.floor(Math.random() * msgs.length)];
 }
 
@@ -110,10 +111,25 @@ function buildSnapshot(irt, stationId) {
   const hourFactor = getHourlyFactor();
   const hour = getColombiaHour();
 
-  const speed = clamp(Math.round(90 - irt * 0.55 - hourFactor * 15 + rnd(8)), 15, 110);
-  const baseFlow = 80 + hourFactor * 480;
-  const flow = clamp(Math.round(baseFlow * ssMultiplier + irt * 1.2 + rnd(20)), 60, 680);
-  const occup = clamp(Math.round(irt * 0.65 + hourFactor * 25 + 8 + rnd(4)), 5, 95);
+  // ─── Velocidad realista en zona de peaje ───
+  // En peaje la velocidad máxima es ~40 km/h (FacilPass) o ~25 km/h (efectivo)
+  // En horas pico se reduce aún más por congestión
+  // hourFactor: 0.04-0.06 (madrugada) → 0.95 (pico)
+  const isValley = hourFactor < 0.25;
+  const peakSpeedReduction = hourFactor * 12; // más tráfico → más lento
+  const baseSpeed = isValley
+    ? clamp(Math.round(35 - irt * 0.1 + rnd(5)), 20, 40)     // valle: 20-40 km/h tranquilo
+    : clamp(Math.round(30 - irt * 0.15 - peakSpeedReduction + rnd(5)), 10, 35); // pico: 10-35 km/h
+  const speed = baseSpeed;
+
+  // ─── Flujo vehicular proporcional a hora ───
+  // Valle nocturno (22h): ~40-80 veh/h, no 200+
+  // Pico Semana Santa: hasta 600+ veh/h
+  const baseFlow = isValley
+    ? 20 + hourFactor * 250    // madrugada: 20-80 veh/h
+    : 80 + hourFactor * 480;   // día: 80-560 veh/h
+  const flow = clamp(Math.round(baseFlow * ssMultiplier + irt * 0.8 + rnd(15)), 15, 680);
+  const occup = clamp(Math.round(irt * 0.45 + hourFactor * 30 + 5 + rnd(4)), 3, 95);
   const c4closed = irt > 82;
 
   // ─── Colas: patrón diferente para SALIDA vs RETORNO ───
@@ -233,16 +249,24 @@ export default function useTollData(stationId, corridorId) {
 
       setData(prev => {
         const newAlerts = [];
-        const alertProb = isHighRisk ? 0.05 : 0.02;
-        if (Math.random() < alertProb) {
-          newAlerts.push({
-            id: `t-${(++alertIdRef.current) % 100000}-${Date.now().toString(36)}`,
-            severity: irt > 70 ? 'critical' : 'warning',
-            message: generateAlertMessage(irt, isRetorno),
-            timestamp: new Date(),
-            resolved: false,
-            source: Math.random() > 0.5 ? 'CCTV' : 'CONTEO',
-          });
+        const hour = getColombiaHour();
+        const isPeakAM = hour >= 6 && hour <= 9;
+        const isPeakPM = hour >= 14 && hour <= 18;
+        const isPeak = isPeakAM || isPeakPM;
+
+        // Solo generar alertas en horas pico y cuando hay congestión real (IRT > 45)
+        if (isPeak && irt > 45) {
+          const alertProb = irt > 70 ? (isHighRisk ? 0.04 : 0.02) : (isHighRisk ? 0.015 : 0.008);
+          if (Math.random() < alertProb) {
+            newAlerts.push({
+              id: `t-${(++alertIdRef.current) % 100000}-${Date.now().toString(36)}`,
+              severity: irt > 70 ? 'critical' : 'warning',
+              message: generateAlertMessage(irt, isRetorno),
+              timestamp: new Date(),
+              resolved: false,
+              source: Math.random() > 0.5 ? 'CCTV' : 'CONTEO',
+            });
+          }
         }
 
         const snapshot = buildSnapshot(irt, stationId);

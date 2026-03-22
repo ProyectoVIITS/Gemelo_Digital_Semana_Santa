@@ -188,15 +188,32 @@ function buildSnapshot(irt, stationId) {
 
     const activeLaneIndex = finalActive ? lanes.filter(l => l.active).length : -1;
     const isFacilPass = finalActive && activeLaneIndex < Math.ceil(booth.total * 0.25);
-    const laneSpeed = finalActive
-      ? clamp(Math.round(speed + (isFacilPass ? 10 : -3) + rnd(8)), 15, 110)
-      : 0;
-    const laneQueue = finalActive
-      ? clamp(Math.round(((irt - 28) / (10 + i) + rnd(1.5)) * queueFactor), 0, 8)
-      : 0;
 
     // En retorno, marcar si es caseta reconvertida
     const laneDirection = isRetornoBooth ? 'retorno' : (isRetorno && finalActive && i >= booth.retorno && i < booth.retorno + (retornoActivas - booth.retorno)) ? 'retorno-extra' : 'salida';
+    const isRetLane = laneDirection === 'retorno' || laneDirection === 'retorno-extra';
+
+    // Velocidad y cola realistas según dirección del carril
+    // Retorno: velocidades más bajas por congestión de entrada, colas más largas en pico
+    // Salida: velocidades normales de peaje
+    // Variación pequeña por carril (+/- 2) para no ser idénticos pero sin saltos aleatorios
+    const laneVariation = ((i * 7 + 3) % 5) - 2; // determinístico por carril: -2, -1, 0, 1, 2
+    let laneSpeed, laneQueue;
+
+    if (!finalActive) {
+      laneSpeed = 0;
+      laneQueue = 0;
+    } else if (isRetLane) {
+      // Carriles RETORNO: más lentos, colas más largas
+      const retBaseSpeed = clamp(Math.round(speed * 0.7 + (isFacilPass ? 8 : -2) + laneVariation), 10, 40);
+      const retQueue = clamp(Math.round(((irt - 20) / (8 + i) + 1) * queueFactor * 1.3), 0, 12);
+      laneSpeed = retBaseSpeed;
+      laneQueue = retQueue;
+    } else {
+      // Carriles SALIDA: velocidad normal de peaje
+      laneSpeed = clamp(Math.round(speed + (isFacilPass ? 10 : -3) + laneVariation), 15, 50);
+      laneQueue = clamp(Math.round(((irt - 28) / (10 + i)) * queueFactor), 0, 8);
+    }
 
     lanes.push({
       id: i + 1,

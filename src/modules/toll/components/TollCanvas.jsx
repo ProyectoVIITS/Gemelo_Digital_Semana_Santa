@@ -295,10 +295,9 @@ export default function TollCanvas({
       }
     }
 
-    // ── Separador visual entre sentidos de circulación (dentro de la vía) ──
-    // Doble línea amarilla continua entre carriles de retorno y salida
-    if (!isMini && currentLanes && currentLanes.length > 0) {
-      // Find the boundary: last retorno lane index
+    // ── Separador visual entre sentidos de circulación (doble línea amarilla continua) ──
+    // Aplica siempre que haya carriles de retorno — visible en mini y full
+    if (currentLanes && currentLanes.length > 0) {
       let lastRetornoIdx = -1;
       for (let i = 0; i < currentLanes.length; i++) {
         if (currentLanes[i].direction === 'retorno' || currentLanes[i].direction === 'retorno-extra') {
@@ -307,16 +306,20 @@ export default function TollCanvas({
       }
       if (lastRetornoIdx >= 0 && lastRetornoIdx < currentLanes.length - 1) {
         const dividerY = roadTop + laneH * (lastRetornoIdx + 1);
-        ctx.strokeStyle = 'rgba(250, 204, 21, 0.5)';
-        ctx.lineWidth = 1.5;
+        const gap = isMini ? 1 : 2.5; // separación entre las dos líneas
+        const lw = isMini ? 1 : 2;
+        ctx.strokeStyle = 'rgba(250, 204, 21, 0.85)';
+        ctx.lineWidth = lw;
         ctx.setLineDash([]);
+        // Línea superior
         ctx.beginPath();
-        ctx.moveTo(0, dividerY - 1.5);
-        ctx.lineTo(w, dividerY - 1.5);
+        ctx.moveTo(0, dividerY - gap);
+        ctx.lineTo(w, dividerY - gap);
         ctx.stroke();
+        // Línea inferior
         ctx.beginPath();
-        ctx.moveTo(0, dividerY + 1.5);
-        ctx.lineTo(w, dividerY + 1.5);
+        ctx.moveTo(0, dividerY + gap);
+        ctx.lineTo(w, dividerY + gap);
         ctx.stroke();
       }
     }
@@ -372,26 +375,30 @@ export default function TollCanvas({
       }
     }
 
-    // HUD Overlays
+    // HUD Overlays — posición según dirección del carril
     if (!isMini) {
       for (let i = 0; i < numLanes; i++) {
         const lane = currentLanes[i];
         if (!lane || lane.status === 'closed' || !lane.active) continue;
         const cy = laneY(i, roadTop, roadBot, numLanes);
-        const hudX = gantryX + 50;
+        const isRetornoLane = lane.direction === 'retorno' || lane.direction === 'retorno-extra';
+
+        // Retorno: HUD a la izquierda de la caseta | Salida: HUD a la derecha
+        const hudW = 72;
+        const hudX = isRetornoLane ? (gantryX - 50 - hudW) : (gantryX + 50);
         const hudY = cy - 14;
 
         ctx.fillStyle = 'rgba(4, 10, 20, 0.75)';
-        ctx.fillRect(hudX, hudY, 72, 24);
-        ctx.strokeStyle = `rgba(${cRgb}, 0.3)`;
+        ctx.fillRect(hudX, hudY, hudW, 24);
+        ctx.strokeStyle = isRetornoLane ? 'rgba(250, 204, 21, 0.3)' : `rgba(${cRgb}, 0.3)`;
         ctx.lineWidth = 0.5;
-        ctx.strokeRect(hudX, hudY, 72, 24);
+        ctx.strokeRect(hudX, hudY, hudW, 24);
 
-        ctx.fillStyle = corridorColor;
+        ctx.fillStyle = isRetornoLane ? '#facc15' : corridorColor;
         ctx.font = '9px JetBrains Mono, monospace';
         ctx.textAlign = 'left';
         ctx.fillText(`${lane.speed} km/h`, hudX + 4, hudY + 10);
-        ctx.fillStyle = lane.queue > 5 ? '#ef4444' : '#475569';
+        ctx.fillStyle = lane.queue > 5 ? '#ef4444' : '#64748b';
         ctx.fillText(`Cola: ${lane.queue}`, hudX + 4, hudY + 20);
       }
     }
@@ -440,7 +447,11 @@ export default function TollCanvas({
     const isMini = mode === 'mini';
 
     // ── Spawn vehicles — accumulator pattern (NEVER stops) ──
-    const activeLanes = (currentLanes || []).filter(l => l.status !== 'closed' && l.active).map(l => l.id - 1);
+    // SALIDA vehicles ONLY use salida lanes (never retorno lanes)
+    const activeLanes = (currentLanes || []).filter(l => {
+      if (l.status === 'closed' || !l.active) return false;
+      return l.direction === 'salida' || (!l.direction); // only salida lanes
+    }).map(l => l.id - 1);
     if (activeLanes.length > 0) {
       // ── Spawn rate proportional to REAL flow (per station, NOT per lane) ──
       // vehiclesHour is TOTAL for the station (all lanes combined)
@@ -554,27 +565,31 @@ export default function TollCanvas({
       window._motoRetornoAcc = Math.min(window._motoRetornoAcc, 1.5);
     }
 
-    // ── Spawn COUNTER-FLOW VEHICLES (vehículos en dirección opuesta, dentro de carriles) ──
-    const counterLanes = (currentLanes || []).filter(l => {
+    // ── Spawn RETORNO VEHICLES (vehículos entrando por carriles C1/C2, der→izq) ──
+    // Estos son el flujo REAL de retorno — vehículos que regresan a Bogotá
+    const retornoLanes = (currentLanes || []).filter(l => {
       if (!l.active) return false;
-      const { isRetorno: isRet } = getOperationMode();
-      if (isRet) return l.direction === 'salida';
       return l.direction === 'retorno' || l.direction === 'retorno-extra';
     }).map(l => l.id - 1);
 
-    if (counterLanes.length > 0) {
-      const { isRetorno: isRetornoMode } = getOperationMode();
-      const counterFlowRatio = isRetornoMode ? 0.08 : 0.05;
+    if (retornoLanes.length > 0) {
+      const { isRetorno: isRetornoMode, retornoScale } = getOperationMode();
+      // Flujo de retorno proporcional a la escala y demanda
+      // En retorno activo: flujo alto (proporcional al flujo principal)
+      // En salida: flujo bajo por carriles de retorno fijos
       const mainFlow = (currentMetrics.vehiclesHour || 60) / 3600;
-      const counterFlow = Math.max(mainFlow * counterFlowRatio, _isNight ? 0.015 : 0.035);
-      counterAccRef.current += counterFlow * dt;
+      const retornoRatio = isRetornoMode ? Math.max(retornoScale * 1.5, 0.25) : 0.05;
+      const retornoFlow = Math.max(mainFlow * retornoRatio, isRetornoMode ? 0.12 : 0.03);
+      counterAccRef.current += retornoFlow * dt;
 
-      const MAX_COUNTER = _isNight ? 3 : (isMini ? 4 : 8);
-      const counterCount = vehicles.filter(v => v.isCounter && !v.isMoto).length;
+      // Más vehículos en retorno activo
+      const MAX_RETORNO_VEH = isRetornoMode
+        ? (_isNight ? 4 : (isMini ? 6 : 14))
+        : (_isNight ? 2 : (isMini ? 3 : 5));
+      const retornoVehCount = vehicles.filter(v => v.isCounter && !v.isMoto).length;
 
-      while (counterAccRef.current >= 1 && counterCount < MAX_COUNTER) {
+      while (counterAccRef.current >= 1 && retornoVehCount < MAX_RETORNO_VEH) {
         counterAccRef.current -= 1;
-        // Solo vehículos (no motos, esas ya se spawnean arriba)
         const nonMotoCategories = ['C1', 'C2', 'C3', 'C4', 'C5'];
         const weights = [0.50, 0.15, 0.18, 0.10, 0.07];
         let r = Math.random(), acc = 0, cat = 'C1';
@@ -583,23 +598,28 @@ export default function TollCanvas({
           if (r < acc) { cat = nonMotoCategories[i]; break; }
         }
         const catDef = VEHICLE_CATEGORIES[cat];
-        const chosenLane = counterLanes[Math.floor(Math.random() * counterLanes.length)];
+        const chosenLane = retornoLanes[Math.floor(Math.random() * retornoLanes.length)];
+
+        // Velocidad de retorno: en pico baja (cola), en valle normal
+        const retSpeed = isRetornoMode
+          ? (15 + Math.random() * 25 + (1 - retornoScale) * 20) // pico: 15-40, valle: 25-60
+          : (40 + Math.random() * 30); // flujo libre
 
         vehicles.push({
-          x: w + catDef.width + Math.random() * 120,
+          x: w + catDef.width + Math.random() * 100,
           lane: chosenLane,
           category: cat,
-          speed: 35 + Math.random() * 30,
-          state: 'departing',
+          speed: retSpeed,
+          state: 'departing', // counter vehicles: der→izq, processed by isCounter block
           waitTimer: 0,
           passedCount: false,
           isMoto: false,
           isCounter: true,
           stuckTimer: 0,
         });
-        if (vehicles.filter(v => v.isCounter && !v.isMoto).length >= MAX_COUNTER) break;
+        if (vehicles.filter(v => v.isCounter && !v.isMoto).length >= MAX_RETORNO_VEH) break;
       }
-      counterAccRef.current = Math.min(counterAccRef.current, 1.5);
+      counterAccRef.current = Math.min(counterAccRef.current, 2);
     }
 
     // ── Helper: find nearest vehicle ahead in same lane ──
@@ -622,9 +642,47 @@ export default function TollCanvas({
       const catDef = VEHICLE_CATEGORIES[v.category];
       if (!catDef) { vehicles.splice(i, 1); continue; }
 
-      // Counter-flow vehicles: travel RIGHT → LEFT, no booth interaction
+      // Counter-flow vehicles: travel RIGHT → LEFT
       if (v.isCounter) {
-        v.x -= v.speed * dt;
+        if (v.isMoto) {
+          // Motos counter: flujo libre, no frenan
+          v.x -= v.speed * dt;
+        } else {
+          // Vehículos counter: frenan al acercarse a la caseta, esperan, salen
+          const distToBooth = v.x - gantryX;
+          if (v.state === 'departing' && distToBooth > 0) {
+            // Approaching booth from right: decelerate
+            if (distToBooth < 120) {
+              const brakeFactor = Math.max(distToBooth / 120, 0.08);
+              v.x -= v.speed * brakeFactor * dt;
+            } else {
+              v.x -= v.speed * dt;
+            }
+            // Reached booth → wait
+            if (distToBooth <= 5) {
+              v.state = 'counter-booth';
+              v.waitTimer = 1.5 + Math.random() * 3; // 1.5-4.5s en caseta
+            }
+          } else if (v.state === 'counter-booth') {
+            v.waitTimer -= dt;
+            if (v.waitTimer <= 0) {
+              v.state = 'counter-exit';
+              v.speed = 25 + Math.random() * 20;
+            }
+          } else {
+            // counter-exit: acelerar y salir por la izquierda
+            v.speed = Math.min(v.speed + 15 * dt, 80);
+            v.x -= v.speed * dt;
+          }
+          // Anti-collision: frenado por vehículo counter delante
+          for (const o of vehicles) {
+            if (o === v || !o.isCounter || o.isMoto || o.lane !== v.lane) continue;
+            if (o.x < v.x && (v.x - o.x) < (VEHICLE_CATEGORIES[o.category]?.width || 20) + 10) {
+              v.x = o.x + (VEHICLE_CATEGORIES[o.category]?.width || 20) + 10;
+              break;
+            }
+          }
+        }
         if (v.x < -80) vehicles.splice(i, 1);
         continue;
       }

@@ -133,15 +133,17 @@ function buildSnapshot(irt, stationId) {
   const c4closed = irt > 82;
 
   // ─── Colas: patrón diferente para SALIDA vs RETORNO ───
+  // Actualizado 23/mar 17h — campo reporta gridlock sostenido hasta 20h
   let queueFactor;
   if (isRetorno) {
-    // RETORNO: pico masivo 1pm-5pm, acumulación desde 10am
-    const isPeakReturn = hour >= 13 && hour <= 17;
+    const isGridlock = hour >= 17 && hour <= 20;     // GRIDLOCK confirmado campo DITRA
+    const isPeakReturn = hour >= 13 && hour <= 16;   // Pico alto pre-gridlock
     const isBuildUp = hour >= 10 && hour <= 12;
-    const isEvening = hour >= 18 && hour <= 20;
-    queueFactor = isPeakReturn ? 1.0
+    const isLateEvening = hour >= 21 && hour <= 22;
+    queueFactor = isGridlock ? 1.0       // Máxima congestión — estancado
+      : isPeakReturn ? 0.90              // Pico alto
       : isBuildUp ? 0.65
-      : isEvening ? 0.45
+      : isLateEvening ? 0.35
       : 0.0;
   } else {
     // SALIDA: picos 6-8am y 3-5pm (sin cambios)
@@ -210,9 +212,22 @@ function buildSnapshot(irt, stationId) {
       laneSpeed = 0;
       laneQueue = 0;
     } else if (isRetLane) {
-      // Carriles RETORNO: más lentos, colas más largas
-      const retBaseSpeed = clamp(Math.round(speed * 0.7 + (isFacilPass ? 8 : -2) + laneVariation), 10, 40);
-      const retQueue = clamp(Math.round(((irt - 20) / (8 + i) + 1) * queueFactor * 1.3), 0, 12);
+      // Carriles RETORNO: velocidades y colas basadas en congestión real
+      // Gridlock (IRT>90): 3-8 km/h, colas 8-15 veh — tráfico estancado
+      // Pico alto (IRT>75): 8-15 km/h, colas 5-10 veh
+      // Normal: 15-30 km/h, colas moderadas
+      const isGridlockNow = irt > 90;
+      const isHighCongestion = irt > 75;
+      let retBaseSpeed;
+      if (isGridlockNow) {
+        retBaseSpeed = clamp(Math.round(3 + laneVariation + (isFacilPass ? 3 : 0)), 2, 8);
+      } else if (isHighCongestion) {
+        retBaseSpeed = clamp(Math.round(8 + laneVariation + (isFacilPass ? 5 : 0)), 5, 18);
+      } else {
+        retBaseSpeed = clamp(Math.round(speed * 0.7 + (isFacilPass ? 8 : -2) + laneVariation), 10, 40);
+      }
+      const queueMultiplier = isGridlockNow ? 1.8 : isHighCongestion ? 1.4 : 1.0;
+      const retQueue = clamp(Math.round(((irt - 15) / (6 + i) + 2) * queueFactor * queueMultiplier), 0, 18);
       laneSpeed = retBaseSpeed;
       laneQueue = retQueue;
     } else {

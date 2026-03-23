@@ -649,8 +649,12 @@ export default function TollCanvas({
       const retornoFlow = Math.max(mainFlow * retornoRatio, isRetornoMode ? 0.12 : 0.03);
       counterAccRef.current += retornoFlow * dt;
 
-      // Más vehículos en retorno activo
-      const MAX_RETORNO_VEH = isRetornoMode
+      // Más vehículos en retorno — gridlock llena la vía
+      const colHourNow = getColHour();
+      const gridlockActive = isRetornoMode && retornoScale >= 0.85 && colHourNow >= 13 && colHourNow <= 20;
+      const MAX_RETORNO_VEH = gridlockActive
+        ? (isMini ? 10 : 22)  // GRIDLOCK: vía llena de vehículos
+        : isRetornoMode
         ? (_isNight ? 4 : (isMini ? 6 : 14))
         : (_isNight ? 2 : (isMini ? 3 : 5));
       const retornoVehCount = vehicles.filter(v => v.isCounter && !v.isMoto).length;
@@ -664,10 +668,21 @@ export default function TollCanvas({
         const catDef = VEHICLE_CATEGORIES[cat];
         const chosenLane = retornoLanes[Math.floor(Math.random() * retornoLanes.length)];
 
-        // Velocidad de retorno: en pico baja (cola), en valle normal
-        const retSpeed = isRetornoMode
-          ? (15 + Math.random() * 25 + (1 - retornoScale) * 20) // pico: 15-40, valle: 25-60
-          : (40 + Math.random() * 30); // flujo libre
+        // Velocidad de retorno según nivel de congestión
+        // Gridlock (escala > 0.85 + hora pico): 3-8 km/h — casi parados
+        // Pico alto (escala > 0.70): 8-18 km/h — muy lento
+        // Normal: 25-50 km/h
+        const colHour = getColHour();
+        const isGridlockHour = colHour >= 13 && colHour <= 20;
+        const isGridlock = isRetornoMode && retornoScale >= 0.85 && isGridlockHour;
+        const isHighCong = isRetornoMode && retornoScale >= 0.70 && isGridlockHour;
+        const retSpeed = isGridlock
+          ? (3 + Math.random() * 5)      // GRIDLOCK: 3-8 km/h — estancado
+          : isHighCong
+          ? (8 + Math.random() * 10)     // Alto: 8-18 km/h
+          : isRetornoMode
+          ? (18 + Math.random() * 20)    // Retorno normal: 18-38 km/h
+          : (40 + Math.random() * 30);   // Flujo libre
 
         vehicles.push({
           x: w + catDef.width + Math.random() * 100,

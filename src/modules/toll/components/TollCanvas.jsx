@@ -684,21 +684,20 @@ export default function TollCanvas({
         const chosenLane = retornoLanes[window._retornoRR % retornoLanes.length];
         window._retornoRR++;
 
-        // Velocidad de retorno según nivel de congestión
-        // Gridlock (escala > 0.85 + hora pico): 3-8 km/h — casi parados
-        // Pico alto (escala > 0.70): 8-18 km/h — muy lento
-        // Normal: 25-50 km/h
+        // Velocidad de retorno en px/s (NO km/h)
+        // Gridlock: lento pero visible (15-30 px/s ≈ avanza, frena en caseta)
+        // Normal: 40-70 px/s
         const colHour = getColHour();
         const isGridlockHour = colHour >= 13 && colHour <= 20;
-        const isGridlock = isRetornoMode && retornoScale >= 0.85 && isGridlockHour;
-        const isHighCong = isRetornoMode && retornoScale >= 0.70 && isGridlockHour;
+        const isGridlock = isRetornoMode && retornoScale >= 0.75 && isGridlockHour;
+        const isHighCong = isRetornoMode && retornoScale >= 0.60 && isGridlockHour;
         const retSpeed = isGridlock
-          ? (3 + Math.random() * 5)      // GRIDLOCK: 3-8 km/h — estancado
+          ? (15 + Math.random() * 15)     // GRIDLOCK: 15-30 px/s — lento pero se mueve
           : isHighCong
-          ? (8 + Math.random() * 10)     // Alto: 8-18 km/h
+          ? (25 + Math.random() * 20)     // Alto: 25-45 px/s
           : isRetornoMode
-          ? (18 + Math.random() * 20)    // Retorno normal: 18-38 km/h
-          : (40 + Math.random() * 30);   // Flujo libre
+          ? (35 + Math.random() * 25)     // Retorno normal: 35-60 px/s
+          : (45 + Math.random() * 30);    // Flujo libre: 45-75 px/s
 
         vehicles.push({
           x: w + catDef.width + Math.random() * 100,
@@ -730,10 +729,10 @@ export default function TollCanvas({
               if (Math.random() < 0.25) fcat = 'C2';
               const fcatDef = VEHICLE_CATEGORIES[fcat];
               vehicles.push({
-                x: w + fcatDef.width + 30 + fi * 80 + Math.random() * 40,
+                x: w + fcatDef.width + 20 + fi * 60 + Math.random() * 30,
                 lane: rl,
                 category: fcat,
-                speed: 2 + Math.random() * 4, // Casi parados
+                speed: 18 + Math.random() * 15, // 18-33 px/s — lento pero avanza
                 state: 'departing',
                 waitTimer: 0,
                 passedCount: false,

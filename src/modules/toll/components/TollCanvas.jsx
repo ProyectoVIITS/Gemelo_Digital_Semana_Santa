@@ -59,18 +59,17 @@ function isCargoRestricted() {
 }
 
 // ─── DISTRIBUCIONES SEGÚN CONTEXTO ───
-// Base con restricción de carga: C3/C4/C5 redistribuido a C1/C2/M
-const CATEGORY_WEIGHTS_RESTRICTED = { M: 0.32, C1: 0.55, C2: 0.12, C3: 0.01, C4: 0.00, C5: 0.00 };
+// RESTRICCIÓN DE CARGA: C3/C4/C5 en CERO ABSOLUTO (≥3.4 ton prohibidos)
+// Resolución MinTransporte: ni un solo camión de carga durante restricción
+const CATEGORY_WEIGHTS_RESTRICTED = { M: 0.32, C1: 0.56, C2: 0.12, C3: 0, C4: 0, C5: 0 };
 
-// RETORNO CON RESTRICCIÓN (hoy 23/mar): buses intermunicipales al máximo
-// Terminal Bogotá: 184K viajeros, ~4000 despachos, 54.3% flujo entre 6PM-12AM
-// Destinos top hacia Bogotá: Girardot, Ibagué, Villavicencio, Sogamoso
-// Buses (C2) suben del 12% al 22% por alto volumen intermunicipal
-const CATEGORY_WEIGHTS_RETORNO_RESTRICTED = { M: 0.30, C1: 0.47, C2: 0.22, C3: 0.01, C4: 0.00, C5: 0.00 };
+// RETORNO + RESTRICCIÓN (23/mar pico mañana 10-14h): buses intermunicipales altos
+// Terminal Bogotá: 184K viajeros, ~4000 despachos
+const CATEGORY_WEIGHTS_RETORNO_RESTRICTED = { M: 0.30, C1: 0.48, C2: 0.22, C3: 0, C4: 0, C5: 0 };
 
-// Retorno tarde-noche (6PM-12AM): 54.3% del flujo concentrado
-// Más buses, menos motos (oscurece), autos familiares dominan
-const CATEGORY_WEIGHTS_RETORNO_PEAK = { M: 0.15, C1: 0.55, C2: 0.28, C3: 0.02, C4: 0.00, C5: 0.00 };
+// RETORNO + RESTRICCIÓN (6PM-12AM): 54.3% del flujo concentrado
+// Máximo buses, motos bajan por oscuridad, CERO carga
+const CATEGORY_WEIGHTS_RETORNO_PEAK = { M: 0.15, C1: 0.57, C2: 0.28, C3: 0, C4: 0, C5: 0 };
 
 function pickCategory() {
   const hour = getColHour();

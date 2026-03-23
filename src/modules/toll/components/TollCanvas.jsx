@@ -657,13 +657,10 @@ export default function TollCanvas({
 
       while (counterAccRef.current >= 1 && retornoVehCount < MAX_RETORNO_VEH) {
         counterAccRef.current -= 1;
-        const nonMotoCategories = ['C1', 'C2', 'C3', 'C4', 'C5'];
-        const weights = [0.50, 0.15, 0.18, 0.10, 0.07];
-        let r = Math.random(), acc = 0, cat = 'C1';
-        for (let i = 0; i < nonMotoCategories.length; i++) {
-          acc += weights[i];
-          if (r < acc) { cat = nonMotoCategories[i]; break; }
-        }
+        // Usar pickCategory() que respeta restricción de carga
+        let cat = pickCategory();
+        // Si pickCategory devuelve moto, re-pick como C1 (motos van por berma, no por carril)
+        if (VEHICLE_CATEGORIES[cat]?.isMoto) cat = 'C1';
         const catDef = VEHICLE_CATEGORIES[cat];
         const chosenLane = retornoLanes[Math.floor(Math.random() * retornoLanes.length)];
 

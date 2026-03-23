@@ -878,12 +878,40 @@ export default function TollCanvas({
             v.speed = 25;
           }
           break;
-        case 'departing':
-          // Aceleración realista post-peaje: 0→60 km/h gradual, no salto a 130
-          v.speed = Math.min(v.speed + 45 * dt, 70);
-          v.x += v.speed * dt;
-          if (v.x > w + 60) vehicles.splice(i, 1);
+        case 'departing': {
+          // ── Represamiento post-peaje: manifestación Soacha u otro evento ──
+          // Los vehículos que ya pasaron la caseta avanzan MUY lento o se detienen
+          // Esto genera cola visible DESPUÉS del peaje (derecha del canvas)
+          const postBoothDist = v.x - gantryX;
+          if (_isGridlock && postBoothDist > 30 && !v.isCounter) {
+            // Buscar vehículo delante (derecha) en este carril
+            let nextAheadX = Infinity;
+            for (const o of vehicles) {
+              if (o === v || o.isCounter || o.isMoto || o.lane !== v.lane) continue;
+              if (o.x > v.x && o.x < nextAheadX) nextAheadX = o.x;
+            }
+            const postGap = nextAheadX - v.x;
+            if (postGap < MIN_GAP * 1.5) {
+              // Parado — vehículo delante muy cerca
+              v.speed = 0;
+            } else if (postGap < MIN_GAP * 4) {
+              // Avance lento — creep
+              v.speed = Math.min(v.speed, 5 + (postGap / MIN_GAP) * 3);
+              v.x += v.speed * dt;
+            } else {
+              // Algo de espacio pero represamiento limita velocidad max
+              v.speed = Math.min(v.speed + 8 * dt, 18);
+              v.x += v.speed * dt;
+            }
+          } else {
+            // Normal o pre-caseta: aceleración gradual
+            v.speed = Math.min(v.speed + 45 * dt, 70);
+            v.x += v.speed * dt;
+          }
+          // En gridlock: vehículos se eliminan más lejos (cola post-peaje visible)
+          if (v.x > w + (_isGridlock ? 200 : 60)) vehicles.splice(i, 1);
           break;
+        }
         default:
           v.state = 'departing';
           v.speed = 40;

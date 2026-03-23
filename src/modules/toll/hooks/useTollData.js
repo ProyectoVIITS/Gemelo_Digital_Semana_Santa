@@ -81,6 +81,8 @@ function generateAlertMessage(irt, isRetorno) {
         'Velocidad media < 25 km/h sentido Bogotá',
         'Congestión severa — casetas retorno al 95%',
         'Vehículo detenido en calzada — carril parcialmente bloqueado',
+        '⚠ MANIFESTACIÓN PÚBLICA EN SOACHA — represamiento post-peaje',
+        'Represamiento Soacha: cola de 3 km sentido Bogotá post-peaje',
       ]
     : [
         'Cola > 8 vehículos en caseta de efectivo',

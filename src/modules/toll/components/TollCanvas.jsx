@@ -775,7 +775,8 @@ export default function TollCanvas({
           // Vehículos counter: frenan al acercarse a la caseta, esperan, salen
           const distToBooth = v.x - gantryX;
           const colHrNow = getColHour();
-          const isGLNow = retornoScale >= 0.75 && colHrNow >= 13 && colHrNow <= 20;
+          const { retornoScale: rScale } = getOperationMode();
+          const isGLNow = rScale >= 0.75 && colHrNow >= 13 && colHrNow <= 20;
 
           // Anti-collision PRIMERO: frenar si hay vehículo counter delante (closer to booth/left)
           const MIN_GAP_C = (VEHICLE_CATEGORIES[v.category]?.width || 20) + 8;

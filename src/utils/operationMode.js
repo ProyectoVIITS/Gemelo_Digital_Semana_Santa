@@ -85,13 +85,14 @@ const RETORNO_PROGRESSIVE_SCALE = {
     22: 0.30,
     23: 0.25,
   },
-  // Lunes festivo: retorno completo con pico 13-17h
+  // Lunes festivo: retorno completo — pico adelantado según reporte DITRA campo 23/mar 11:30h
+  // Chuzacá confirmado: 9 casetas ingresando, 1 saliendo desde las 11:30h
   full: {
-    0: 0.20, 1: 0.20, 2: 0.20, 3: 0.20, 4: 0.25, 5: 0.30,
-    6: 0.40, 7: 0.45, 8: 0.50, 9: 0.55,
-    10: 0.60, 11: 0.65, 12: 0.70,
-    13: 0.80, 14: 0.85, 15: 0.90, 16: 0.90, 17: 0.85,
-    18: 0.70, 19: 0.60,
+    0: 0.20, 1: 0.20, 2: 0.20, 3: 0.20, 4: 0.25, 5: 0.35,
+    6: 0.50, 7: 0.55, 8: 0.65, 9: 0.75,
+    10: 0.80, 11: 0.85, 12: 0.90,
+    13: 0.90, 14: 0.90, 15: 0.90, 16: 0.90, 17: 0.85,
+    18: 0.75, 19: 0.65,
     20: 0.50, 21: 0.40, 22: 0.30, 23: 0.25,
   },
 };

@@ -85,15 +85,15 @@ const RETORNO_PROGRESSIVE_SCALE = {
     22: 0.30,
     23: 0.25,
   },
-  // Lunes festivo — actualizado 23/mar 17:00h reporte campo DITRA
-  // Tráfico ESTANCADO Chuzacá desde 17h. 9 casetas retorno sostenidas hasta 20h.
+  // Lunes festivo — actualizado 23/mar 17:30h foto campo DITRA
+  // Chuzacá confirmado: 8 retorno / 2 salida (no 9/1)
   full: {
     0: 0.20, 1: 0.20, 2: 0.20, 3: 0.20, 4: 0.25, 5: 0.35,
-    6: 0.50, 7: 0.55, 8: 0.65, 9: 0.75,
-    10: 0.80, 11: 0.85, 12: 0.90,
-    13: 0.90, 14: 0.90, 15: 0.90, 16: 0.90, 17: 0.90,
-    18: 0.90, 19: 0.85,
-    20: 0.75, 21: 0.55, 22: 0.35, 23: 0.25,
+    6: 0.50, 7: 0.55, 8: 0.60, 9: 0.70,
+    10: 0.75, 11: 0.80, 12: 0.80,
+    13: 0.80, 14: 0.80, 15: 0.80, 16: 0.80, 17: 0.80,
+    18: 0.80, 19: 0.75,
+    20: 0.65, 21: 0.50, 22: 0.35, 23: 0.25,
   },
 };
 

@@ -528,10 +528,16 @@ export default function TollCanvas({
       const hour = getColHour();
       const isNightTime = hour >= 20 || hour <= 5;
       const rawFlow = (currentMetrics.vehiclesHour || 60) / 3600; // per STATION total
-      const minVisualFlow = isNightTime
+      // En gridlock retorno: flujo salida MÍNIMO (foto campo: casi nadie sale)
+      const { isRetorno: isRetMode } = getOperationMode();
+      const colHourSalida = getColHour();
+      const gridlockSalida = isRetMode && colHourSalida >= 13 && colHourSalida <= 20;
+      const minVisualFlow = gridlockSalida
+        ? (isMini ? 0.04 : 0.08)   // gridlock retorno: apenas 1 veh cada 12s saliendo
+        : isNightTime
         ? (isMini ? 0.06 : 0.12)   // night: ~1 veh every 8s (very sparse)
         : (isMini ? 0.15 : 0.25);  // day: ~1 veh every 4s minimum
-      const effectiveFlow = Math.max(rawFlow, minVisualFlow); // DO NOT multiply by lanes
+      const effectiveFlow = Math.max(gridlockSalida ? rawFlow * 0.15 : rawFlow, minVisualFlow);
 
       // Accumulate fractional spawns to guarantee eventual spawn
       spawnAccRef.current += effectiveFlow * dt;
@@ -599,16 +605,20 @@ export default function TollCanvas({
       const c1Y = laneY(0, roadTop, roadBot, numLanesNow);
       const laneHNow = (roadBot - roadTop) / numLanesNow;
 
-      // Volumen motos retorno: mayor cuando es operación retorno
-      const motoRetornoFlow = isRetornoMode
-        ? (_isNight ? 0.06 : 0.18)  // Retorno: muchas motos entrando
-        : (_isNight ? 0.02 : 0.06); // Salida: pocas motos entrando
+      // Volumen motos retorno: alta densidad en retorno según foto campo
+      const colHourMoto = getColHour();
+      const isGridlockMoto = isRetornoMode && colHourMoto >= 13 && colHourMoto <= 20;
+      const motoRetornoFlow = isGridlockMoto
+        ? 0.35                            // GRIDLOCK: muchas motos retorno (foto campo)
+        : isRetornoMode
+        ? (_isNight ? 0.06 : 0.22)       // Retorno normal: flujo alto motos
+        : (_isNight ? 0.02 : 0.06);      // Salida: pocas motos entrando
 
       if (!window._motoRetornoAcc) window._motoRetornoAcc = 0;
       window._motoRetornoAcc += motoRetornoFlow * dt;
 
       const motoRetornoCount = vehicles.filter(v => v.isMoto && v.isCounter).length;
-      const MAX_MOTO_RETORNO = isRetornoMode ? (_isNight ? 3 : 6) : (_isNight ? 1 : 3);
+      const MAX_MOTO_RETORNO = isGridlockMoto ? 10 : isRetornoMode ? (_isNight ? 3 : 7) : (_isNight ? 1 : 3);
 
       while (window._motoRetornoAcc >= 1 && motoRetornoCount < MAX_MOTO_RETORNO) {
         window._motoRetornoAcc -= 1;

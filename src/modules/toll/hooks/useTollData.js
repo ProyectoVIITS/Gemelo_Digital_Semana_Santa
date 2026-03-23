@@ -129,11 +129,20 @@ function buildSnapshot(irt, stationId) {
     ? 20 + hourFactor * 250    // madrugada: 20-80 veh/h
     : 80 + hourFactor * 480;   // día: 80-560 veh/h
   const flow = clamp(Math.round(baseFlow * ssMultiplier + irt * 0.8 + rnd(15)), 15, 680);
-  // Ocupación: gridlock retorno (IRT>90) fuerza 90-98%
-  const gridlockOccup = isRetorno && irt > 90;
-  const occup = gridlockOccup
-    ? clamp(Math.round(90 + (irt - 90) * 1.2 + rnd(2)), 90, 98)
-    : clamp(Math.round(irt * 0.45 + hourFactor * 30 + 5 + rnd(4)), 3, 95);
+  // Ocupación proporcional al estado real del retorno
+  // Retorno gridlock (IRT>85): 88-98% — vía saturada como foto campo
+  // Retorno alto (IRT>65): 70-88% — congestión fuerte
+  // Retorno moderado: escala normal con boost
+  let occup;
+  if (isRetorno && irt > 85) {
+    occup = clamp(Math.round(88 + (irt - 85) * 0.8 + rnd(2)), 88, 98);
+  } else if (isRetorno && irt > 65) {
+    occup = clamp(Math.round(70 + (irt - 65) * 0.9 + rnd(3)), 70, 90);
+  } else if (isRetorno && irt > 40) {
+    occup = clamp(Math.round(40 + (irt - 40) * 1.1 + rnd(4)), 40, 72);
+  } else {
+    occup = clamp(Math.round(irt * 0.45 + hourFactor * 30 + 5 + rnd(4)), 3, 95);
+  }
   const c4closed = irt > 82;
 
   // ─── Colas: patrón diferente para SALIDA vs RETORNO ───

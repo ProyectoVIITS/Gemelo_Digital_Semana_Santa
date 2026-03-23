@@ -513,30 +513,27 @@ export default function TollCanvas({
     const countLineX = w * COUNT_LINE_X;
     const isMini = mode === 'mini';
 
+    // ── FRAME CACHE: calculate once, reuse everywhere ──
+    const _hour = getColHour();
+    const _opMode = getOperationMode();
+    const _isRetorno = _opMode.isRetorno;
+    const _retScale = _opMode.retornoScale || 0;
+    const _isNight = _hour >= 20 || _hour <= 5;
+    const _isGridlock = _isRetorno && _retScale >= 0.75 && _hour >= 13 && _hour <= 20;
+
     // ── Spawn vehicles — accumulator pattern (NEVER stops) ──
-    // SALIDA vehicles ONLY use salida lanes (never retorno lanes)
     const activeLanes = (currentLanes || []).filter(l => {
       if (l.status === 'closed' || !l.active) return false;
-      return l.direction === 'salida' || (!l.direction); // only salida lanes
+      return l.direction === 'salida' || (!l.direction);
     }).map(l => l.id - 1);
     if (activeLanes.length > 0) {
-      // ── Spawn rate proportional to REAL flow (per station, NOT per lane) ──
-      // vehiclesHour is TOTAL for the station (all lanes combined)
-      // 22:00 valley: ~30-50 veh/h → 0.008-0.014 veh/s → 1 vehicle every 70-120s
-      // 08:00 peak:   ~500 veh/h  → 0.14 veh/s → 1 vehicle every 7s
-      // Minimum visual: 1 vehicle every ~8s at night (keeps road alive but sparse)
-      const hour = getColHour();
-      const isNightTime = hour >= 20 || hour <= 5;
-      const rawFlow = (currentMetrics.vehiclesHour || 60) / 3600; // per STATION total
-      // En gridlock retorno: flujo salida MÍNIMO (foto campo: casi nadie sale)
-      const { isRetorno: isRetMode } = getOperationMode();
-      const colHourSalida = getColHour();
-      const gridlockSalida = isRetMode && colHourSalida >= 13 && colHourSalida <= 20;
+      const rawFlow = (currentMetrics.vehiclesHour || 60) / 3600;
+      const gridlockSalida = _isGridlock;
       const minVisualFlow = gridlockSalida
-        ? (isMini ? 0.04 : 0.08)   // gridlock retorno: apenas 1 veh cada 12s saliendo
-        : isNightTime
-        ? (isMini ? 0.06 : 0.12)   // night: ~1 veh every 8s (very sparse)
-        : (isMini ? 0.15 : 0.25);  // day: ~1 veh every 4s minimum
+        ? (isMini ? 0.04 : 0.08)
+        : _isNight
+        ? (isMini ? 0.06 : 0.12)
+        : (isMini ? 0.15 : 0.25);
       const effectiveFlow = Math.max(gridlockSalida ? rawFlow * 0.15 : rawFlow, minVisualFlow);
 
       // Accumulate fractional spawns to guarantee eventual spawn
@@ -558,8 +555,7 @@ export default function TollCanvas({
         if (catDef.isMoto) {
           // Motos SALIDA: berma inferior, junto al último carril — izq→der
           // En retorno: pocas motos salen (70% se rechazan → solo 30% del volumen normal)
-          const { isRetorno: isRetMode } = getOperationMode();
-          if (isRetMode && Math.random() < 0.70) {
+          if (_isRetorno && Math.random() < 0.70) {
             // Skip this moto — en retorno pocas motos salen
           } else {
             const motoY = roadBot + (isMini ? 4 : 8) + Math.random() * (isMini ? 3 : 5);
@@ -600,25 +596,20 @@ export default function TollCanvas({
     // ── Spawn MOTOS RETORNO (siempre activas, berma superior junto a C1, der→izq) ──
     // En operación retorno: mayor volumen entrando. En salida: menor volumen entrando.
     {
-      const { isRetorno: isRetornoMode } = getOperationMode();
       const numLanesNow = (currentLanes || []).length || 4;
       const c1Y = laneY(0, roadTop, roadBot, numLanesNow);
       const laneHNow = (roadBot - roadTop) / numLanesNow;
-
-      // Volumen motos retorno: alta densidad en retorno según foto campo
-      const colHourMoto = getColHour();
-      const isGridlockMoto = isRetornoMode && colHourMoto >= 13 && colHourMoto <= 20;
-      const motoRetornoFlow = isGridlockMoto
-        ? 0.35                            // GRIDLOCK: muchas motos retorno (foto campo)
-        : isRetornoMode
-        ? (_isNight ? 0.06 : 0.22)       // Retorno normal: flujo alto motos
-        : (_isNight ? 0.02 : 0.06);      // Salida: pocas motos entrando
+      const motoRetornoFlow = _isGridlock
+        ? 0.35
+        : _isRetorno
+        ? (_isNight ? 0.06 : 0.22)
+        : (_isNight ? 0.02 : 0.06);
 
       if (!window._motoRetornoAcc) window._motoRetornoAcc = 0;
       window._motoRetornoAcc += motoRetornoFlow * dt;
 
       const motoRetornoCount = vehicles.filter(v => v.isMoto && v.isCounter).length;
-      const MAX_MOTO_RETORNO = isGridlockMoto ? 10 : isRetornoMode ? (_isNight ? 3 : 7) : (_isNight ? 1 : 3);
+      const MAX_MOTO_RETORNO = _isGridlock ? 10 : _isRetorno ? (_isNight ? 3 : 7) : (_isNight ? 1 : 3);
 
       while (window._motoRetornoAcc >= 1 && motoRetornoCount < MAX_MOTO_RETORNO) {
         window._motoRetornoAcc -= 1;
@@ -650,22 +641,20 @@ export default function TollCanvas({
     }).map(l => l.id - 1);
 
     if (retornoLanes.length > 0) {
-      const { isRetorno: isRetornoMode, retornoScale } = getOperationMode();
-      const colHourNow = getColHour();
-      const gridlockActive = isRetornoMode && retornoScale >= 0.75 && colHourNow >= 13 && colHourNow <= 20;
+      const gridlockActive = _isGridlock;
 
       // Flujo de retorno: en gridlock, spawn MASIVO para saturar la vía
       const retornoFlow = gridlockActive
         ? 1.5 + retornoLanes.length * 0.2  // GRIDLOCK: ~3.1 veh/s para 8 carriles → satura en 10s
-        : isRetornoMode
-        ? Math.max(0.3, retornoScale * 0.6)  // Retorno normal: moderado-alto
+        : _isRetorno
+        ? Math.max(0.3, _retScale * 0.6)
         : 0.04;  // Salida: mínimo
       counterAccRef.current += retornoFlow * dt;
 
       // Vehículos máximos: gridlock = 5 por carril retorno (vía SATURADA como foto campo)
       const MAX_RETORNO_VEH = gridlockActive
         ? (isMini ? 20 : retornoLanes.length * 5)  // 8 carriles × 5 = 40 vehículos
-        : isRetornoMode
+        : _isRetorno
         ? (_isNight ? 4 : (isMini ? 8 : 18))
         : (_isNight ? 2 : (isMini ? 3 : 5));
       const retornoVehCount = vehicles.filter(v => v.isCounter && !v.isMoto).length;
@@ -687,15 +676,11 @@ export default function TollCanvas({
         // Velocidad de retorno en px/s (NO km/h)
         // Gridlock: lento pero visible (15-30 px/s ≈ avanza, frena en caseta)
         // Normal: 40-70 px/s
-        const colHour = getColHour();
-        const isGridlockHour = colHour >= 13 && colHour <= 20;
-        const isGridlock = isRetornoMode && retornoScale >= 0.75 && isGridlockHour;
-        const isHighCong = isRetornoMode && retornoScale >= 0.60 && isGridlockHour;
-        const retSpeed = isGridlock
+        const retSpeed = _isGridlock
           ? (15 + Math.random() * 15)     // GRIDLOCK: 15-30 px/s — lento pero se mueve
-          : isHighCong
-          ? (25 + Math.random() * 20)     // Alto: 25-45 px/s
-          : isRetornoMode
+          : (_isRetorno && _retScale >= 0.60 && _hour >= 13 && _hour <= 20)
+          ? (25 + Math.random() * 20)
+          : _isRetorno
           ? (35 + Math.random() * 25)     // Retorno normal: 35-60 px/s
           : (45 + Math.random() * 30);    // Flujo libre: 45-75 px/s
 
@@ -756,9 +741,11 @@ export default function TollCanvas({
       return minX;
     }
 
-    // Colombia hour for peak detection (cached per frame)
-    const hour = parseInt(new Date().toLocaleString('en-US', { hour: 'numeric', hour12: false, timeZone: 'America/Bogota' }), 10);
-    const isPeakHour = (hour >= 6 && hour <= 8) || (hour >= 13 && hour <= 17);
+    // Reuse frame cache for vehicle updates
+    const isPeakHour = (_hour >= 6 && _hour <= 8) || (_hour >= 13 && _hour <= 17);
+    const counterWait = _isGridlock ? 8 : 3;
+    const counterExitSpd = _isGridlock ? 12 : 30;
+    const counterMaxSpd = _isGridlock ? 35 : 70;
 
     // ── Update vehicles ──
     for (let i = vehicles.length - 1; i >= 0; i--) {
@@ -769,61 +756,40 @@ export default function TollCanvas({
       // Counter-flow vehicles: travel RIGHT → LEFT
       if (v.isCounter) {
         if (v.isMoto) {
-          // Motos counter: flujo libre, no frenan
           v.x -= v.speed * dt;
         } else {
-          // Vehículos counter: frenan al acercarse a la caseta, esperan, salen
           const distToBooth = v.x - gantryX;
-          const colHrNow = getColHour();
-          const { retornoScale: rScale } = getOperationMode();
-          const isGLNow = rScale >= 0.75 && colHrNow >= 13 && colHrNow <= 20;
 
-          // Anti-collision PRIMERO: frenar si hay vehículo counter delante (closer to booth/left)
-          const MIN_GAP_C = (VEHICLE_CATEGORIES[v.category]?.width || 20) + 8;
-          let blocked = false;
+          // Simple anti-collision: find nearest counter vehicle to the LEFT in same lane
+          let nearestLeft = -999;
+          let nearestW = 20;
           for (const o of vehicles) {
             if (o === v || !o.isCounter || o.isMoto || o.lane !== v.lane) continue;
-            const gap = v.x - o.x - (VEHICLE_CATEGORIES[o.category]?.width || 20) / 2 - (VEHICLE_CATEGORIES[v.category]?.width || 20) / 2;
-            if (o.x < v.x && gap < MIN_GAP_C) {
-              // Hard stop — mantener distancia mínima
-              v.x = o.x + (VEHICLE_CATEGORIES[o.category]?.width || 20) / 2 + (VEHICLE_CATEGORIES[v.category]?.width || 20) / 2 + MIN_GAP_C;
-              blocked = true;
-              break;
-            } else if (o.x < v.x && gap < MIN_GAP_C * 3) {
-              // Frenar suavemente al acercarse
-              v.speed = Math.max(v.speed * 0.92, 3);
-              break;
-            }
+            if (o.x < v.x && o.x > nearestLeft) { nearestLeft = o.x; nearestW = VEHICLE_CATEGORIES[o.category]?.width || 20; }
           }
+          const gapToNext = v.x - nearestLeft - nearestW;
+          const MIN_GAP_C = catDef.width + 6;
 
           if (v.state === 'departing' && distToBooth > 0) {
-            if (!blocked) {
-              if (distToBooth < 180) {
-                // Frenado progresivo largo (180px de zona de frenado)
-                const brakeFactor = Math.max(distToBooth / 180, 0.05);
-                v.x -= v.speed * brakeFactor * dt;
-              } else {
-                v.x -= v.speed * dt;
-              }
+            // Don't move if too close to vehicle ahead
+            if (gapToNext > MIN_GAP_C) {
+              const brake = distToBooth < 150 ? Math.max(distToBooth / 150, 0.08) : 1;
+              v.x -= v.speed * brake * dt;
             }
-            // Reached booth → wait
-            if (distToBooth <= 5) {
+            if (distToBooth <= 4) {
               v.state = 'counter-booth';
-              // GRIDLOCK: espera larga en caseta (pago lento, congestión)
-              v.waitTimer = isGLNow
-                ? (6 + Math.random() * 10)   // 6-16s en gridlock
-                : (2 + Math.random() * 4);   // 2-6s normal
+              v.waitTimer = counterWait + Math.random() * counterWait;
             }
           } else if (v.state === 'counter-booth') {
             v.waitTimer -= dt;
             if (v.waitTimer <= 0) {
               v.state = 'counter-exit';
-              v.speed = isGLNow ? (8 + Math.random() * 10) : (20 + Math.random() * 20);
+              v.speed = counterExitSpd + Math.random() * 10;
             }
           } else {
-            // counter-exit: salir lento en gridlock
-            if (!blocked) {
-              v.speed = Math.min(v.speed + (isGLNow ? 5 : 15) * dt, isGLNow ? 30 : 70);
+            // counter-exit
+            if (gapToNext > MIN_GAP_C) {
+              v.speed = Math.min(v.speed + 8 * dt, counterMaxSpd);
               v.x -= v.speed * dt;
             }
           }

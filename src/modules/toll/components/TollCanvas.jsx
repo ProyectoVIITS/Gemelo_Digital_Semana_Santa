@@ -651,19 +651,20 @@ export default function TollCanvas({
 
     if (retornoLanes.length > 0) {
       const { isRetorno: isRetornoMode, retornoScale } = getOperationMode();
-      // Flujo de retorno proporcional a la escala y demanda
-      // En retorno activo: flujo alto (proporcional al flujo principal)
-      // En salida: flujo bajo por carriles de retorno fijos
-      const mainFlow = (currentMetrics.vehiclesHour || 60) / 3600;
-      const retornoRatio = isRetornoMode ? Math.max(retornoScale * 1.5, 0.25) : 0.05;
-      const retornoFlow = Math.max(mainFlow * retornoRatio, isRetornoMode ? 0.12 : 0.03);
+      const colHourNow = getColHour();
+      const gridlockActive = isRetornoMode && retornoScale >= 0.75 && colHourNow >= 13 && colHourNow <= 20;
+
+      // Flujo de retorno: en gridlock, spawn AGRESIVO para llenar la vía rápido
+      const retornoFlow = gridlockActive
+        ? 0.8 + retornoLanes.length * 0.1  // GRIDLOCK: ~1.6 veh/s para 8 carriles → llena rápido
+        : isRetornoMode
+        ? Math.max(0.25, retornoScale * 0.5)  // Retorno normal: moderado
+        : 0.04;  // Salida: mínimo
       counterAccRef.current += retornoFlow * dt;
 
-      // Más vehículos en retorno — gridlock llena la vía
-      const colHourNow = getColHour();
-      const gridlockActive = isRetornoMode && retornoScale >= 0.85 && colHourNow >= 13 && colHourNow <= 20;
+      // Vehículos máximos: gridlock = 3 por carril retorno (vía totalmente llena)
       const MAX_RETORNO_VEH = gridlockActive
-        ? (isMini ? 10 : 22)  // GRIDLOCK: vía llena de vehículos
+        ? (isMini ? 16 : retornoLanes.length * 3)  // 8 carriles × 3 = 24 vehículos
         : isRetornoMode
         ? (_isNight ? 4 : (isMini ? 6 : 14))
         : (_isNight ? 2 : (isMini ? 3 : 5));

@@ -16,20 +16,67 @@ const VEHICLE_CATEGORIES = {
 };
 
 // Distribución realista para carreteras nacionales de Colombia
-// Motos ~30% del tráfico diurno pero casi nulas de noche (10% o menos)
-// C1 autos ~42%, C2 buses ~8%, C3 camiones 2E ~12%, C4 camiones 3E ~5%, C5 pesados ~3%
+// Fuente: INVÍAS/DITRA conteos volumétricos 2024-2025
 const CATEGORY_WEIGHTS_DAY   = { M: 0.28, C1: 0.42, C2: 0.08, C3: 0.13, C4: 0.06, C5: 0.03 };
 const CATEGORY_WEIGHTS_NIGHT = { M: 0.06, C1: 0.48, C2: 0.05, C3: 0.22, C4: 0.12, C5: 0.07 };
-// Noche: más camiones (transporte de carga nocturno), casi sin motos
+
+// ─── RESTRICCIÓN DE CARGA PESADA ───
+// Resolución MinTransporte: festivos y puentes, vehículos ≥3.4 ton restringidos
+// 23 marzo 2026 (San José): 10:00 AM - 11:00 PM en corredor Chía-Mosquera-La Mesa-Girardot
+// Semana Santa 2026: aplica misma restricción
+// C3 (camión 2 ejes), C4 (camión 3+ ejes), C5 (camión pesado) NO circulan
+// Excepciones: grúas de asistencia y transporte de leche (no modelados)
+const CARGO_RESTRICTION_CALENDAR = {
+  '2026-03-20': { start: 10, end: 23 }, // Viernes puente San José
+  '2026-03-21': { start: 6, end: 23 },  // Sábado puente
+  '2026-03-22': { start: 6, end: 23 },  // Domingo puente
+  '2026-03-23': { start: 10, end: 23 }, // Lunes festivo San José
+  // Semana Santa 2026
+  '2026-04-02': { start: 10, end: 23 }, // Jueves Santo
+  '2026-04-03': { start: 6, end: 23 },  // Viernes Santo
+  '2026-04-04': { start: 6, end: 23 },  // Sábado de Gloria
+  '2026-04-05': { start: 10, end: 23 }, // Domingo de Resurrección
+};
 
 function getColHour() {
   return parseInt(new Date().toLocaleString('en-US', { hour: 'numeric', hour12: false, timeZone: 'America/Bogota' }), 10);
 }
 
+function getColDate() {
+  const now = new Date();
+  const y = now.toLocaleString('en-US', { year: 'numeric', timeZone: 'America/Bogota' });
+  const m = now.toLocaleString('en-US', { month: '2-digit', timeZone: 'America/Bogota' });
+  const d = now.toLocaleString('en-US', { day: '2-digit', timeZone: 'America/Bogota' });
+  return `${y}-${m}-${d}`;
+}
+
+function isCargoRestricted() {
+  const dateStr = getColDate();
+  const restriction = CARGO_RESTRICTION_CALENDAR[dateStr];
+  if (!restriction) return false;
+  const hour = getColHour();
+  return hour >= restriction.start && hour <= restriction.end;
+}
+
+// Distribución CON restricción de carga: C3/C4/C5 redistribuido a C1/C2/M
+// Solo pasan vehículos livianos (≤3.4 ton): motos, autos, buses pequeños
+const CATEGORY_WEIGHTS_RESTRICTED = { M: 0.32, C1: 0.55, C2: 0.12, C3: 0.01, C4: 0.00, C5: 0.00 };
+// C3 al 1% = algún camión liviano que NO supera 3.4 ton
+
 function pickCategory() {
   const hour = getColHour();
   const isNight = hour >= 20 || hour <= 5;
-  const weights = isNight ? CATEGORY_WEIGHTS_NIGHT : CATEGORY_WEIGHTS_DAY;
+  const restricted = isCargoRestricted();
+
+  let weights;
+  if (restricted) {
+    weights = CATEGORY_WEIGHTS_RESTRICTED;
+  } else if (isNight) {
+    weights = CATEGORY_WEIGHTS_NIGHT;
+  } else {
+    weights = CATEGORY_WEIGHTS_DAY;
+  }
+
   const r = Math.random();
   let c = 0;
   for (const [cat, w] of Object.entries(weights)) {

@@ -774,36 +774,56 @@ export default function TollCanvas({
         } else {
           // Vehículos counter: frenan al acercarse a la caseta, esperan, salen
           const distToBooth = v.x - gantryX;
+          const colHrNow = getColHour();
+          const isGLNow = retornoScale >= 0.75 && colHrNow >= 13 && colHrNow <= 20;
+
+          // Anti-collision PRIMERO: frenar si hay vehículo counter delante (closer to booth/left)
+          const MIN_GAP_C = (VEHICLE_CATEGORIES[v.category]?.width || 20) + 8;
+          let blocked = false;
+          for (const o of vehicles) {
+            if (o === v || !o.isCounter || o.isMoto || o.lane !== v.lane) continue;
+            const gap = v.x - o.x - (VEHICLE_CATEGORIES[o.category]?.width || 20) / 2 - (VEHICLE_CATEGORIES[v.category]?.width || 20) / 2;
+            if (o.x < v.x && gap < MIN_GAP_C) {
+              // Hard stop — mantener distancia mínima
+              v.x = o.x + (VEHICLE_CATEGORIES[o.category]?.width || 20) / 2 + (VEHICLE_CATEGORIES[v.category]?.width || 20) / 2 + MIN_GAP_C;
+              blocked = true;
+              break;
+            } else if (o.x < v.x && gap < MIN_GAP_C * 3) {
+              // Frenar suavemente al acercarse
+              v.speed = Math.max(v.speed * 0.92, 3);
+              break;
+            }
+          }
+
           if (v.state === 'departing' && distToBooth > 0) {
-            // Approaching booth from right: decelerate
-            if (distToBooth < 120) {
-              const brakeFactor = Math.max(distToBooth / 120, 0.08);
-              v.x -= v.speed * brakeFactor * dt;
-            } else {
-              v.x -= v.speed * dt;
+            if (!blocked) {
+              if (distToBooth < 180) {
+                // Frenado progresivo largo (180px de zona de frenado)
+                const brakeFactor = Math.max(distToBooth / 180, 0.05);
+                v.x -= v.speed * brakeFactor * dt;
+              } else {
+                v.x -= v.speed * dt;
+              }
             }
             // Reached booth → wait
             if (distToBooth <= 5) {
               v.state = 'counter-booth';
-              v.waitTimer = 1.5 + Math.random() * 3; // 1.5-4.5s en caseta
+              // GRIDLOCK: espera larga en caseta (pago lento, congestión)
+              v.waitTimer = isGLNow
+                ? (6 + Math.random() * 10)   // 6-16s en gridlock
+                : (2 + Math.random() * 4);   // 2-6s normal
             }
           } else if (v.state === 'counter-booth') {
             v.waitTimer -= dt;
             if (v.waitTimer <= 0) {
               v.state = 'counter-exit';
-              v.speed = 25 + Math.random() * 20;
+              v.speed = isGLNow ? (8 + Math.random() * 10) : (20 + Math.random() * 20);
             }
           } else {
-            // counter-exit: acelerar y salir por la izquierda
-            v.speed = Math.min(v.speed + 15 * dt, 80);
-            v.x -= v.speed * dt;
-          }
-          // Anti-collision: frenado por vehículo counter delante
-          for (const o of vehicles) {
-            if (o === v || !o.isCounter || o.isMoto || o.lane !== v.lane) continue;
-            if (o.x < v.x && (v.x - o.x) < (VEHICLE_CATEGORIES[o.category]?.width || 20) + 10) {
-              v.x = o.x + (VEHICLE_CATEGORIES[o.category]?.width || 20) + 10;
-              break;
+            // counter-exit: salir lento en gridlock
+            if (!blocked) {
+              v.speed = Math.min(v.speed + (isGLNow ? 5 : 15) * dt, isGLNow ? 30 : 70);
+              v.x -= v.speed * dt;
             }
           }
         }

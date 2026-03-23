@@ -670,6 +670,9 @@ export default function TollCanvas({
         : (_isNight ? 2 : (isMini ? 3 : 5));
       const retornoVehCount = vehicles.filter(v => v.isCounter && !v.isMoto).length;
 
+      // Round-robin para distribuir uniformemente en TODOS los carriles retorno
+      if (!window._retornoRR) window._retornoRR = 0;
+
       while (counterAccRef.current >= 1 && retornoVehCount < MAX_RETORNO_VEH) {
         counterAccRef.current -= 1;
         // Usar pickCategory() que respeta restricción de carga
@@ -677,7 +680,9 @@ export default function TollCanvas({
         // Si pickCategory devuelve moto, re-pick como C1 (motos van por berma, no por carril)
         if (VEHICLE_CATEGORIES[cat]?.isMoto) cat = 'C1';
         const catDef = VEHICLE_CATEGORIES[cat];
-        const chosenLane = retornoLanes[Math.floor(Math.random() * retornoLanes.length)];
+        // Round-robin: cada vehículo al siguiente carril, garantiza todos llenos
+        const chosenLane = retornoLanes[window._retornoRR % retornoLanes.length];
+        window._retornoRR++;
 
         // Velocidad de retorno según nivel de congestión
         // Gridlock (escala > 0.85 + hora pico): 3-8 km/h — casi parados
@@ -709,7 +714,37 @@ export default function TollCanvas({
         });
         if (vehicles.filter(v => v.isCounter && !v.isMoto).length >= MAX_RETORNO_VEH) break;
       }
-      counterAccRef.current = Math.min(counterAccRef.current, 2);
+      counterAccRef.current = Math.min(counterAccRef.current, 3);
+
+      // ── GRIDLOCK REFILL: garantizar mínimo 5 vehículos por carril retorno ──
+      if (gridlockActive) {
+        const MIN_PER_LANE = 5;
+        for (const rl of retornoLanes) {
+          const inLane = vehicles.filter(v => v.isCounter && !v.isMoto && v.lane === rl).length;
+          if (inLane < MIN_PER_LANE && vehicles.length < MAX_RETORNO_VEH + 20) {
+            const needed = MIN_PER_LANE - inLane;
+            for (let fi = 0; fi < needed; fi++) {
+              let fcat = pickCategory();
+              if (VEHICLE_CATEGORIES[fcat]?.isMoto) fcat = 'C1';
+              // Más buses en retorno (C2 = bus intermunicipal)
+              if (Math.random() < 0.25) fcat = 'C2';
+              const fcatDef = VEHICLE_CATEGORIES[fcat];
+              vehicles.push({
+                x: w + fcatDef.width + 30 + fi * 80 + Math.random() * 40,
+                lane: rl,
+                category: fcat,
+                speed: 2 + Math.random() * 4, // Casi parados
+                state: 'departing',
+                waitTimer: 0,
+                passedCount: false,
+                isMoto: false,
+                isCounter: true,
+                stuckTimer: 0,
+              });
+            }
+          }
+        }
+      }
     }
 
     // ── Helper: find nearest vehicle ahead in same lane ──

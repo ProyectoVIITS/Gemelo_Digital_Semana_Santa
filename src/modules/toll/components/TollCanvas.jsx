@@ -58,18 +58,39 @@ function isCargoRestricted() {
   return hour >= restriction.start && hour <= restriction.end;
 }
 
-// Distribución CON restricción de carga: C3/C4/C5 redistribuido a C1/C2/M
-// Solo pasan vehículos livianos (≤3.4 ton): motos, autos, buses pequeños
+// ─── DISTRIBUCIONES SEGÚN CONTEXTO ───
+// Base con restricción de carga: C3/C4/C5 redistribuido a C1/C2/M
 const CATEGORY_WEIGHTS_RESTRICTED = { M: 0.32, C1: 0.55, C2: 0.12, C3: 0.01, C4: 0.00, C5: 0.00 };
-// C3 al 1% = algún camión liviano que NO supera 3.4 ton
+
+// RETORNO CON RESTRICCIÓN (hoy 23/mar): buses intermunicipales al máximo
+// Terminal Bogotá: 184K viajeros, ~4000 despachos, 54.3% flujo entre 6PM-12AM
+// Destinos top hacia Bogotá: Girardot, Ibagué, Villavicencio, Sogamoso
+// Buses (C2) suben del 12% al 22% por alto volumen intermunicipal
+const CATEGORY_WEIGHTS_RETORNO_RESTRICTED = { M: 0.30, C1: 0.47, C2: 0.22, C3: 0.01, C4: 0.00, C5: 0.00 };
+
+// Retorno tarde-noche (6PM-12AM): 54.3% del flujo concentrado
+// Más buses, menos motos (oscurece), autos familiares dominan
+const CATEGORY_WEIGHTS_RETORNO_PEAK = { M: 0.15, C1: 0.55, C2: 0.28, C3: 0.02, C4: 0.00, C5: 0.00 };
 
 function pickCategory() {
   const hour = getColHour();
-  const isNight = hour >= 20 || hour <= 5;
+  const isNight = hour >= 22 || hour <= 5;
   const restricted = isCargoRestricted();
+  const { isRetorno } = getOperationMode();
 
   let weights;
-  if (restricted) {
+  if (isRetorno && restricted) {
+    // Retorno con restricción de carga
+    const isRetornoPeak = hour >= 18 && hour <= 23; // 54.3% viajes 6PM-12AM
+    const isRetornoMorning = hour >= 10 && hour <= 14; // Pico adelantado mañana
+    if (isRetornoPeak) {
+      weights = CATEGORY_WEIGHTS_RETORNO_PEAK; // Máximo buses, mínimo motos
+    } else if (isRetornoMorning) {
+      weights = CATEGORY_WEIGHTS_RETORNO_RESTRICTED; // Buses altos, motos moderadas
+    } else {
+      weights = CATEGORY_WEIGHTS_RESTRICTED; // Restricción base
+    }
+  } else if (restricted) {
     weights = CATEGORY_WEIGHTS_RESTRICTED;
   } else if (isNight) {
     weights = CATEGORY_WEIGHTS_NIGHT;

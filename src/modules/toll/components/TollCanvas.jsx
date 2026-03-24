@@ -510,6 +510,20 @@ export default function TollCanvas({
     const numLanes = (currentLanes || []).length || 4;
     const dt = deltaMs / 1000;
     const vehicles = vehiclesRef.current;
+
+    // ── LANE DIRECTION VALIDATION ──
+    // Purge vehicles in wrong lanes when booth config changes dynamically
+    const salidaLaneSet = new Set((currentLanes || []).filter(l => l.active && l.direction === 'salida').map(l => l.id - 1));
+    const retornoLaneSet = new Set((currentLanes || []).filter(l => l.active && (l.direction === 'retorno' || l.direction === 'retorno-extra')).map(l => l.id - 1));
+    for (let vi = vehicles.length - 1; vi >= 0; vi--) {
+      const v = vehicles[vi];
+      if (v.isMoto) continue; // Motos go on berma, not lanes
+      if (v.isCounter && !retornoLaneSet.has(v.lane)) {
+        vehicles.splice(vi, 1); // Counter vehicle in non-retorno lane → remove
+      } else if (!v.isCounter && !salidaLaneSet.has(v.lane)) {
+        vehicles.splice(vi, 1); // Salida vehicle in non-salida lane → remove
+      }
+    }
     const gantryX = w * GANTRY_X;
     const countLineX = w * COUNT_LINE_X;
     const isMini = mode === 'mini';
@@ -532,6 +546,7 @@ export default function TollCanvas({
       : 1.0;
     // Override gridlock: si datos reales muestran congestión > 60%, forzar gridlock visual
     const _realGridlock = _hasRealTraffic && _rt.congestionRatio > 0.6;
+    const effectiveGridlock = _isGridlock || _realGridlock;
 
     // ── Spawn vehicles — accumulator pattern (NEVER stops) ──
     const activeLanes = (currentLanes || []).filter(l => {
@@ -766,8 +781,6 @@ export default function TollCanvas({
 
     // Reuse frame cache for vehicle updates
     const isPeakHour = (_hour >= 6 && _hour <= 8) || (_hour >= 13 && _hour <= 17);
-    // Si datos reales dicen gridlock, forzar comportamiento gridlock
-    const effectiveGridlock = _isGridlock || _realGridlock;
     const counterWait = effectiveGridlock ? 8 : 3;
     const counterExitSpd = effectiveGridlock ? 12 : 30;
     const counterMaxSpd = effectiveGridlock ? 35 : 70;

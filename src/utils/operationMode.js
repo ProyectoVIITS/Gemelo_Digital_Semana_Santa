@@ -85,15 +85,16 @@ const RETORNO_PROGRESSIVE_SCALE = {
     22: 0.30,
     23: 0.25,
   },
-  // Lunes festivo — actualizado 23/mar 17:30h foto campo DITRA
-  // Chuzacá confirmado: 8 retorno / 2 salida (no 9/1)
+  // Lunes festivo — desescalamiento nocturno, mañana día laboral
+  // Google Routes 19:30h: retorno 22 km/h (50%), salida 15 km/h (70%)
+  // Retorno bajando → equilibrar 5/5 a partir de 19h
   full: {
     0: 0.20, 1: 0.20, 2: 0.20, 3: 0.20, 4: 0.25, 5: 0.35,
     6: 0.50, 7: 0.55, 8: 0.60, 9: 0.70,
     10: 0.75, 11: 0.80, 12: 0.80,
-    13: 0.80, 14: 0.80, 15: 0.80, 16: 0.80, 17: 0.80,
-    18: 0.80, 19: 0.75,
-    20: 0.65, 21: 0.50, 22: 0.35, 23: 0.25,
+    13: 0.80, 14: 0.80, 15: 0.80, 16: 0.80, 17: 0.75,
+    18: 0.50, 19: 0.50, // ← 5 retorno / 5 salida equilibrado
+    20: 0.50, 21: 0.50, 22: 0.50, 23: 0.50,
   },
 };
 

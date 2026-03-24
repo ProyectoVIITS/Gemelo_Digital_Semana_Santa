@@ -149,8 +149,8 @@ export const NEXUS_CORRIDORS = [
     svgPath: 'M 168 270 Q 162 268 155 265',
     tollStations: [
       { id: 'C4-01', name: 'GUALANDAY', lat: 4.300429, lng: -75.050087, km: 'KM 15', sector: 'IBAGUÉ - CRUCE RUTA 45 (ESPINAL)', type: 'INVIAS', department: 'Tolima', speedLimit: 80, weightLimit: 32, boothConfig: { total: 4, salida: 3, retorno: 1 } },
-      { id: 'C4-02', name: 'TÚNEL LA LÍNEA (TOLIMA)', lat: 4.445527, lng: -75.518799, km: 'KM 48', sector: 'LA LÍNEA - CAJAMARCA', type: 'INVIAS', department: 'Tolima', speedLimit: 60, weightLimit: 32, isCritical: true, boothConfig: { total: 3, salida: 2, retorno: 1 } },
-      { id: 'C4-03', name: 'TÚNEL LA LÍNEA (QUINDÍO)', lat: 4.523458, lng: -75.589381, km: 'KM 53', sector: 'ARMENIA - LA LÍNEA', type: 'INVIAS', department: 'Quindío', speedLimit: 60, weightLimit: 32, isCritical: true, boothConfig: { total: 3, salida: 2, retorno: 1 } },
+      { id: 'C4-02', name: 'TÚNEL LA LÍNEA (TOLIMA)', lat: 4.445527, lng: -75.518799, km: 'KM 48', sector: 'LA LÍNEA - CAJAMARCA (BERMELLÓN)', type: 'INVIAS', department: 'Tolima', speedLimit: 60, weightLimit: 32, isCritical: true, boothConfig: { total: 4, salida: 2, retorno: 2 } }, // 2 carriles/sentido, peaje Bermellón
+      { id: 'C4-03', name: 'TÚNEL LA LÍNEA (QUINDÍO)', lat: 4.523458, lng: -75.589381, km: 'KM 53', sector: 'ARMENIA - LA LÍNEA (AMÉRICAS)', type: 'INVIAS', department: 'Quindío', speedLimit: 60, weightLimit: 32, isCritical: true, boothConfig: { total: 4, salida: 2, retorno: 2 } }, // 2 carriles/sentido, peaje Américas
     ],
   },
 
@@ -187,7 +187,7 @@ export const NEXUS_CORRIDORS = [
     departments: ['Cundinamarca', 'Boyacá'],
     svgPath: 'M 193 245 Q 194 235 196 225 Q 198 215 200 205',
     tollStations: [
-      { id: 'C6-01', name: 'ANDES', lat: 4.822679, lng: -74.033081, km: 'KM 18', sector: 'AUTONORTE', type: 'INVIAS', department: 'Cundinamarca', speedLimit: 80, weightLimit: 32, boothConfig: { total: 8, salida: 6, retorno: 2 } },
+      { id: 'C6-01', name: 'ANDES', lat: 4.822679, lng: -74.033081, km: 'KM 18', sector: 'AUTONORTE', type: 'INVIAS', department: 'Cundinamarca', speedLimit: 80, weightLimit: 32, boothConfig: { total: 16, salida: 12, retorno: 4 } }, // 16 carriles confirmado (4 TAG exclusivos)
       { id: 'C6-02', name: 'EL ROBLE', lat: 5.031299, lng: -73.839882, km: 'KM 62', sector: 'BOGOTÁ - CHOCONTÁ', type: 'BTS AUTOVÍA', department: 'Cundinamarca', speedLimit: 80, weightLimit: 32, boothConfig: { total: 6, salida: 4, retorno: 2 } },
       { id: 'C6-03', name: 'ALBARRACÍN', lat: 5.290461, lng: -73.583504, km: 'KM 110', sector: 'CHOCONTÁ - TUNJA', type: 'BTS AUTOVÍA', department: 'Boyacá', speedLimit: 80, weightLimit: 32, boothConfig: { total: 6, salida: 4, retorno: 2 } },
       { id: 'C6-04', name: 'TUTA', lat: 5.656897, lng: -73.278435, km: 'KM 145', sector: 'TUNJA - DUITAMA', type: 'BTS AUTOVÍA', department: 'Boyacá', speedLimit: 80, weightLimit: 32, boothConfig: { total: 6, salida: 4, retorno: 2 } },

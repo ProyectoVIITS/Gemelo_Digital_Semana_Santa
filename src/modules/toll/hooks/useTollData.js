@@ -107,7 +107,7 @@ function generateAlertMessage(irt, isRetorno) {
   return msgs[Math.floor(Math.random() * msgs.length)];
 }
 
-function buildSnapshot(irt, stationId) {
+function buildSnapshot(irt, stationId, realTraffic = null) {
   const { isRetorno } = getOperationMode();
   const { flowProfile, ssMultiplier } = getActiveProfile();
   const hourFactor = getHourlyFactor();
@@ -118,11 +118,20 @@ function buildSnapshot(irt, stationId) {
   // En horas pico se reduce aún más por congestión
   // hourFactor: 0.04-0.06 (madrugada) → 0.95 (pico)
   const isValley = hourFactor < 0.25;
-  const peakSpeedReduction = hourFactor * 12; // más tráfico → más lento
-  const baseSpeed = isValley
-    ? clamp(Math.round(35 - irt * 0.1 + rnd(5)), 20, 40)     // valle: 20-40 km/h tranquilo
-    : clamp(Math.round(30 - irt * 0.15 - peakSpeedReduction + rnd(5)), 10, 35); // pico: 10-35 km/h
-  const speed = baseSpeed;
+  const peakSpeedReduction = hourFactor * 12;
+
+  // ── OVERRIDE CON DATOS REALES (Google Routes API) ──
+  // Si hay tráfico real, usamos esa velocidad directamente
+  let speed;
+  if (realTraffic && realTraffic.currentSpeed != null) {
+    // Velocidad real de Google Routes → ajustar a zona de peaje (peaje ≈ 40% de velocidad vía)
+    speed = clamp(Math.round(realTraffic.currentSpeed * 0.4 + rnd(3)), 3, 45);
+  } else {
+    const baseSpeed = isValley
+      ? clamp(Math.round(35 - irt * 0.1 + rnd(5)), 20, 40)
+      : clamp(Math.round(30 - irt * 0.15 - peakSpeedReduction + rnd(5)), 10, 35);
+    speed = baseSpeed;
+  }
 
   // ─── Flujo vehicular proporcional a hora ───
   // Valle nocturno (22h): ~40-80 veh/h, no 200+
@@ -135,8 +144,12 @@ function buildSnapshot(irt, stationId) {
   // Retorno gridlock (IRT>85): 88-98% — vía saturada como foto campo
   // Retorno alto (IRT>65): 70-88% — congestión fuerte
   // Retorno moderado: escala normal con boost
+  // ── Ocupación: override con datos reales si disponibles ──
   let occup;
-  if (isRetorno && irt > 85) {
+  if (realTraffic && realTraffic.congestionRatio != null) {
+    // congestionRatio 0=libre, 1=parado → mapear a ocupación 10-98%
+    occup = clamp(Math.round(10 + realTraffic.congestionRatio * 88 + rnd(2)), 5, 98);
+  } else if (isRetorno && irt > 85) {
     occup = clamp(Math.round(88 + (irt - 85) * 0.8 + rnd(2)), 88, 98);
   } else if (isRetorno && irt > 65) {
     occup = clamp(Math.round(70 + (irt - 65) * 0.9 + rnd(3)), 70, 90);
@@ -303,13 +316,19 @@ function updateHistory(prev, irt) {
   return [...prev.slice(-23), point];
 }
 
-export default function useTollData(stationId, corridorId) {
+/**
+ * @param {string} stationId
+ * @param {string} corridorId
+ * @param {object|null} realTraffic - Datos de Google Routes API { currentSpeed, freeFlowSpeed, congestionRatio }
+ *   Si se provee, overridea velocidad y congestión en la simulación
+ */
+export default function useTollData(stationId, corridorId, realTraffic = null) {
   const { baseIrtMap } = getActiveProfile();
   const baseIRT = baseIrtMap[stationId] ?? 40;
   const isHighRisk = HIGH_RISK_TOLLS.includes(stationId);
   const { isRetorno } = getOperationMode();
 
-  const [data, setData] = useState(() => buildSnapshot(baseIRT, stationId));
+  const [data, setData] = useState(() => buildSnapshot(baseIRT, stationId, realTraffic));
   const alertIdRef = useRef(0);
 
   useEffect(() => {
@@ -339,7 +358,7 @@ export default function useTollData(stationId, corridorId) {
           }
         }
 
-        const snapshot = buildSnapshot(irt, stationId);
+        const snapshot = buildSnapshot(irt, stationId, realTraffic);
         return {
           ...snapshot,
           speedHistory: updateHistory(prev.speedHistory, irt),
@@ -349,7 +368,7 @@ export default function useTollData(stationId, corridorId) {
     }, 1800);
 
     return () => clearInterval(id);
-  }, [baseIRT, stationId, isHighRisk, isRetorno]);
+  }, [baseIRT, stationId, isHighRisk, isRetorno, realTraffic]); // eslint-disable-line
 
   return data;
 }

@@ -127,7 +127,8 @@ export default function TollCanvas({
   metrics = {},
   showHeader = true,
   showMetrics = true,
-  direction = 'salida', // 'salida' | 'retorno'
+  direction = 'salida',
+  realTraffic = null, // Google Routes API data { currentSpeed, congestionRatio }
 }) {
   const CANVAS_H = mode === 'mini' ? 180 : 340;
   // MAX_VEHICLES adapts to time: fewer at night to prevent visual clutter
@@ -521,6 +522,17 @@ export default function TollCanvas({
     const _isNight = _hour >= 20 || _hour <= 5;
     const _isGridlock = _isRetorno && _retScale >= 0.75 && _hour >= 13 && _hour <= 20;
 
+    // ── REAL TRAFFIC from Google Routes API ──
+    // Si hay datos reales, overrideamos velocidades del canvas
+    const _rt = realTraffic; // { currentSpeed (km/h), congestionRatio (0-1) }
+    const _hasRealTraffic = !!(_rt && _rt.currentSpeed != null);
+    // Factor de velocidad real: si Google dice 6 km/h vs 45 libre = 0.13 → vehículos MUY lentos
+    const _realSpeedFactor = _hasRealTraffic
+      ? Math.max(0.05, _rt.currentSpeed / Math.max(_rt.freeFlowSpeed || 60, 1))
+      : 1.0;
+    // Override gridlock: si datos reales muestran congestión > 60%, forzar gridlock visual
+    const _realGridlock = _hasRealTraffic && _rt.congestionRatio > 0.6;
+
     // ── Spawn vehicles — accumulator pattern (NEVER stops) ──
     const activeLanes = (currentLanes || []).filter(l => {
       if (l.status === 'closed' || !l.active) return false;
@@ -544,13 +556,16 @@ export default function TollCanvas({
         const cat = pickCategory();
         const catDef = VEHICLE_CATEGORIES[cat];
 
-        // ── Speed based on real flow: valley = slow approach, peak = faster ──
+        // ── Speed: use REAL traffic data if available ──
         const vehHour = currentMetrics.vehiclesHour || 100;
-        const flowRatio = Math.min(vehHour / 600, 1); // 0 = empty, 1 = saturated
-        // Valley (22h, ~40 veh/h): approach at 25-40 km/h → calm, sparse
-        // Peak (8h, ~500 veh/h): approach at 35-60 km/h → dense, faster arrival
-        const approachSpeedBase = 25 + flowRatio * 20; // 25-45 range
-        const approachSpeedVar = 8 + flowRatio * 12;   // 8-20 variance
+        const flowRatio = Math.min(vehHour / 600, 1);
+        let approachSpeedBase = 25 + flowRatio * 20;
+        let approachSpeedVar = 8 + flowRatio * 12;
+        // Override con datos reales de Google Routes
+        if (_hasRealTraffic) {
+          approachSpeedBase = approachSpeedBase * _realSpeedFactor;
+          approachSpeedVar = approachSpeedVar * _realSpeedFactor;
+        }
 
         if (catDef.isMoto) {
           // Motos SALIDA: berma inferior, junto al último carril — izq→der
@@ -676,13 +691,21 @@ export default function TollCanvas({
         // Velocidad de retorno en px/s (NO km/h)
         // Gridlock: lento pero visible (15-30 px/s ≈ avanza, frena en caseta)
         // Normal: 40-70 px/s
-        const retSpeed = _isGridlock
-          ? (15 + Math.random() * 15)     // GRIDLOCK: 15-30 px/s — lento pero se mueve
-          : (_isRetorno && _retScale >= 0.60 && _hour >= 13 && _hour <= 20)
-          ? (25 + Math.random() * 20)
-          : _isRetorno
-          ? (35 + Math.random() * 25)     // Retorno normal: 35-60 px/s
-          : (45 + Math.random() * 30);    // Flujo libre: 45-75 px/s
+        // Velocidad retorno: si hay datos reales, usarlos
+        let retSpeed;
+        if (_hasRealTraffic && _rt.congestionRatio > 0.5) {
+          // Datos reales de Google: mapear velocidad real a px/s
+          // 6 km/h real → ~8-12 px/s (gridlock visual)
+          retSpeed = Math.max(6, _rt.currentSpeed * 1.5) + Math.random() * 8;
+        } else if (effectiveGridlock) {
+          retSpeed = 15 + Math.random() * 15;
+        } else if (_isRetorno && _retScale >= 0.60 && _hour >= 13 && _hour <= 20) {
+          retSpeed = 25 + Math.random() * 20;
+        } else if (_isRetorno) {
+          retSpeed = 35 + Math.random() * 25;
+        } else {
+          retSpeed = 45 + Math.random() * 30;
+        }
 
         vehicles.push({
           x: w + catDef.width + Math.random() * 100,
@@ -743,9 +766,11 @@ export default function TollCanvas({
 
     // Reuse frame cache for vehicle updates
     const isPeakHour = (_hour >= 6 && _hour <= 8) || (_hour >= 13 && _hour <= 17);
-    const counterWait = _isGridlock ? 8 : 3;
-    const counterExitSpd = _isGridlock ? 12 : 30;
-    const counterMaxSpd = _isGridlock ? 35 : 70;
+    // Si datos reales dicen gridlock, forzar comportamiento gridlock
+    const effectiveGridlock = _isGridlock || _realGridlock;
+    const counterWait = effectiveGridlock ? 8 : 3;
+    const counterExitSpd = effectiveGridlock ? 12 : 30;
+    const counterMaxSpd = effectiveGridlock ? 35 : 70;
 
     // ── Update vehicles ──
     for (let i = vehicles.length - 1; i >= 0; i--) {
@@ -879,37 +904,40 @@ export default function TollCanvas({
           }
           break;
         case 'departing': {
-          // ── Represamiento post-peaje: manifestación Soacha u otro evento ──
-          // Los vehículos que ya pasaron la caseta avanzan MUY lento o se detienen
-          // Esto genera cola visible DESPUÉS del peaje (derecha del canvas)
           const postBoothDist = v.x - gantryX;
-          if (_isGridlock && postBoothDist > 30 && !v.isCounter) {
-            // Buscar vehículo delante (derecha) en este carril
+          if (_isGridlock && postBoothDist > 20 && !v.isCounter) {
+            // ── REPRESAMIENTO POST-PEAJE (Soacha / evento) ──
+            // Todos los vehículos de salida frenan después de la caseta
+            // Se detienen a ~120px del peaje (represamiento a 200m)
+            const stopZone = gantryX + 120 + (v.lane % 3) * 30; // escalonar por carril
+
+            // Buscar vehículo delante
             let nextAheadX = Infinity;
             for (const o of vehicles) {
               if (o === v || o.isCounter || o.isMoto || o.lane !== v.lane) continue;
               if (o.x > v.x && o.x < nextAheadX) nextAheadX = o.x;
             }
             const postGap = nextAheadX - v.x;
+
             if (postGap < MIN_GAP * 1.5) {
-              // Parado — vehículo delante muy cerca
+              // Parado — pegado al de adelante
               v.speed = 0;
-            } else if (postGap < MIN_GAP * 4) {
-              // Avance lento — creep
-              v.speed = Math.min(v.speed, 5 + (postGap / MIN_GAP) * 3);
-              v.x += v.speed * dt;
+            } else if (v.x >= stopZone) {
+              // Llegó a la zona de paro — detenerse
+              v.speed = Math.max(v.speed - 30 * dt, 0);
+              if (v.speed > 0.5) v.x += v.speed * dt;
             } else {
-              // Algo de espacio pero represamiento limita velocidad max
-              v.speed = Math.min(v.speed + 8 * dt, 18);
+              // Acercándose a zona de paro — frenar gradualmente
+              const distToStop = stopZone - v.x;
+              const brakeFactor = Math.min(distToStop / 80, 1);
+              v.speed = Math.min(v.speed + 5 * dt, 8 + brakeFactor * 12);
               v.x += v.speed * dt;
             }
           } else {
-            // Normal o pre-caseta: aceleración gradual
             v.speed = Math.min(v.speed + 45 * dt, 70);
             v.x += v.speed * dt;
           }
-          // En gridlock: vehículos se eliminan más lejos (cola post-peaje visible)
-          if (v.x > w + (_isGridlock ? 200 : 60)) vehicles.splice(i, 1);
+          if (v.x > w + (_isGridlock ? 250 : 60)) vehicles.splice(i, 1);
           break;
         }
         default:

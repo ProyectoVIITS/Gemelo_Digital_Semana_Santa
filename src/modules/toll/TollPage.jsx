@@ -11,6 +11,7 @@ import useTollData from './hooks/useTollData';
 import TollCanvas from './components/TollCanvas';
 import LoadingScreen from '../../components/shared/LoadingScreen';
 import { getOperationMode } from '../../utils/operationMode';
+import { useTrafficAPI } from '../../hooks/useTrafficAPI';
 
 const CARD = { backgroundColor: 'rgba(13, 26, 46, 0.6)', borderColor: '#1a2d4a' };
 
@@ -273,7 +274,8 @@ export default function TollPage() {
     t => t.id.toLowerCase() === tollId?.toLowerCase()
   );
 
-  const data = useTollData(toll?.id || '', corridorId || '');
+  const { traffic } = useTrafficAPI(toll?.id || '');
+  const data = useTollData(toll?.id || '', corridorId || '', traffic);
 
   const handleLoadComplete = useCallback(() => setLoading(false), []);
 
@@ -334,6 +336,7 @@ export default function TollPage() {
               showHeader={true}
               showMetrics={false}
               direction={getOperationMode().mode}
+              realTraffic={traffic}
             />
 
             <SensorPanel metrics={data.metrics} corridorColor={corridor.color} speedLimit={toll.speedLimit} />

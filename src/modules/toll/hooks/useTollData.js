@@ -160,21 +160,32 @@ function buildSnapshot(irt, stationId, realTraffic = null) {
   }
   const c4closed = irt > 82;
 
-  // ─── Colas: patrón diferente para SALIDA vs RETORNO ───
-  // Actualizado 23/mar 17h — campo reporta gridlock sostenido hasta 20h
+  // ─── Colas: patrón por modo de operación ───
+  const opModeSnap = getOperationMode();
+  const isBidirectionalSnap = opModeSnap.isBidirectional || false;
   let queueFactor;
+
   if (isRetorno) {
-    const isGridlock = hour >= 17 && hour <= 20;     // GRIDLOCK confirmado campo DITRA
-    const isPeakReturn = hour >= 13 && hour <= 16;   // Pico alto pre-gridlock
+    // RETORNO PURO (festivos)
+    const isGridlock = hour >= 17 && hour <= 20;
+    const isPeakReturn = hour >= 13 && hour <= 16;
     const isBuildUp = hour >= 10 && hour <= 12;
     const isLateEvening = hour >= 21 && hour <= 22;
-    queueFactor = isGridlock ? 1.0       // Máxima congestión — estancado
-      : isPeakReturn ? 0.90              // Pico alto
+    queueFactor = isGridlock ? 1.0
+      : isPeakReturn ? 0.90
       : isBuildUp ? 0.65
       : isLateEvening ? 0.35
       : 0.0;
+  } else if (isBidirectionalSnap) {
+    // BIDIRECCIONAL (días laborales): colas moderadas en horas pico
+    const isPeakAM = hour >= 6 && hour <= 9;
+    const isPeakPM = hour >= 16 && hour <= 19;
+    queueFactor = isPeakAM ? 0.55
+      : isPeakPM ? 0.50
+      : (hour >= 10 && hour <= 15) ? 0.25
+      : 0.0;
   } else {
-    // SALIDA: picos 6-8am y 3-5pm (sin cambios)
+    // SALIDA PURA: picos 6-8am y 3-5pm
     const isPeakAM = hour >= 6 && hour <= 8;
     const isPeakPM = hour >= 15 && hour <= 17;
     const isPeak = isPeakAM || isPeakPM;
@@ -203,26 +214,37 @@ function buildSnapshot(irt, stationId, realTraffic = null) {
     let finalActive;
     let laneDirection;
 
+    const opMode = getOperationMode();
+    const isBidirectional = opMode.isBidirectional || false;
+
     if (isRetorno) {
+      // RETORNO PURO: casetas retorno físicas + extras progresivos
       if (isRetornoBooth) {
-        // Casetas retorno físicas (C1, C2): siempre activas en retorno
         finalActive = retornoUsed < retornoActivas;
         laneDirection = 'retorno';
         retornoUsed++;
       } else if (extraRetornoUsed < extrasNeeded) {
-        // Casetas de salida reconvertidas a retorno por demanda (C3, C4...)
         finalActive = true;
         laneDirection = 'retorno-extra';
         extraRetornoUsed++;
       } else {
-        // Resto de casetas: siguen como salida, TODAS activas
         finalActive = true;
         laneDirection = 'salida';
       }
+    } else if (isBidirectional) {
+      // BIDIRECCIONAL: TODAS las casetas activas, 60% salida / 40% retorno
+      // Primeras N casetas (C1, C2...) son retorno, resto son salida
+      finalActive = true; // TODAS activas, zero cerradas
+      if (retornoUsed < retornoActivas) {
+        laneDirection = 'retorno';
+        retornoUsed++;
+      } else {
+        laneDirection = 'salida';
+      }
     } else {
-      // SALIDA: C1/C2 cerradas (retorno), el resto activas para salida
-      finalActive = !isRetornoBooth;
-      laneDirection = isRetornoBooth ? 'retorno' : 'salida';
+      // SALIDA PURA (festivos de salida): TODAS activas para salida
+      finalActive = true;
+      laneDirection = 'salida';
     }
 
     const activeLaneIndex = finalActive ? lanes.filter(l => l.active).length : -1;

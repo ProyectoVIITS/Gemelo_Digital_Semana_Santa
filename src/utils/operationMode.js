@@ -19,11 +19,33 @@ const OPERATION_CALENDAR = {
   '2026-03-22': { mode: 'retorno_progresivo', label: 'Operación Retorno · Inicio Progresivo', startHour: 14 },
   '2026-03-23': { mode: 'retorno', label: 'Operación Retorno · Lunes Festivo' },
 
+  // Días laborales con tráfico bidireccional (60% salida / 40% retorno)
+  '2026-03-24': { mode: 'bidireccional', label: 'Tráfico Normal · Martes' },
+  '2026-03-25': { mode: 'bidireccional', label: 'Tráfico Normal · Miércoles' },
+  '2026-03-26': { mode: 'bidireccional', label: 'Tráfico Normal · Jueves' },
+  '2026-03-27': { mode: 'bidireccional', label: 'Presentación DITRA — MinTransporte' },
+  '2026-03-28': { mode: 'bidireccional', label: 'Tráfico Normal · Viernes' },
+
   // Semana Santa 2026
   '2026-04-02': { mode: 'salida',  label: 'Operación Salida · Jueves Santo' },
   '2026-04-03': { mode: 'salida',  label: 'Operación Salida · Viernes Santo' },
   '2026-04-04': { mode: 'retorno_progresivo', label: 'Operación Retorno · Sábado de Gloria', startHour: 12 },
   '2026-04-05': { mode: 'retorno', label: 'Operación Retorno · Domingo de Resurrección' },
+};
+
+/**
+ * Perfil de distribución BIDIRECCIONAL — días laborales normales
+ * 60% salida / 40% retorno → retornoScale = 0.40
+ * Horario pico AM: 6-9h (más retorno entrando a ciudades)
+ * Horario pico PM: 5-8h (más salida saliendo de ciudades)
+ */
+const BIDIRECTIONAL_SCALE = {
+  0: 0.40, 1: 0.40, 2: 0.40, 3: 0.40, 4: 0.40, 5: 0.45,
+  6: 0.50, 7: 0.50, 8: 0.50, 9: 0.45, // AM: más retorno (gente entra a trabajar)
+  10: 0.40, 11: 0.40, 12: 0.40,
+  13: 0.40, 14: 0.40, 15: 0.38,
+  16: 0.35, 17: 0.35, 18: 0.35, 19: 0.38, // PM: más salida (gente sale)
+  20: 0.40, 21: 0.40, 22: 0.40, 23: 0.40,
 };
 
 /**
@@ -139,6 +161,17 @@ export function getOperationMode() {
       };
     }
 
+    if (entry.mode === 'bidireccional') {
+      const scale = BIDIRECTIONAL_SCALE[hour] || 0.40;
+      return {
+        mode: 'bidireccional',
+        label: entry.label,
+        isRetorno: false, // no es retorno puro, es bidireccional
+        isBidirectional: true,
+        retornoScale: scale,
+      };
+    }
+
     return {
       mode: entry.mode,
       label: entry.label,
@@ -147,12 +180,14 @@ export function getOperationMode() {
     };
   }
 
-  // Default: salida
+  // Default: bidireccional 60/40 para cualquier día no programado
+  const scale = BIDIRECTIONAL_SCALE[hour] || 0.40;
   return {
-    mode: 'salida',
-    label: 'Monitor Semana Santa 2026',
+    mode: 'bidireccional',
+    label: 'Monitor Vial VIITS NEXUS',
     isRetorno: false,
-    retornoScale: 0,
+    isBidirectional: true,
+    retornoScale: scale,
   };
 }
 
@@ -162,14 +197,28 @@ export function getOperationMode() {
  * @returns {{ retornoActivas: number, salidaActivas: number }}
  */
 export function getActiveBooths(boothConfig) {
-  const { isRetorno, retornoScale } = getOperationMode();
+  const opMode = getOperationMode();
+  const { isRetorno, retornoScale } = opMode;
+  const isBidirectional = opMode.isBidirectional || false;
   const total = boothConfig.total;
 
-  if (!isRetorno) {
-    // Salida normal: todas menos las de retorno
+  if (isBidirectional) {
+    // Bidireccional: distribución 60/40 — TODAS las casetas activas
+    // retornoScale = 0.40 → 40% de casetas para retorno, 60% para salida
+    const retornoDeseadas = Math.max(1, Math.round(total * retornoScale));
+    const salidaActivas = total - retornoDeseadas;
     return {
-      retornoActivas: boothConfig.retorno,
-      salidaActivas: boothConfig.salida,
+      retornoActivas: retornoDeseadas,
+      salidaActivas,
+      totalActivas: total,
+    };
+  }
+
+  if (!isRetorno) {
+    // Salida pura (festivos de salida): casetas retorno cerradas
+    return {
+      retornoActivas: 0,
+      salidaActivas: total,
       totalActivas: total,
     };
   }

@@ -17,6 +17,7 @@ const SEV_STYLES = {
 
 function DepartureSimulator({ selectedDay, rainByRegion, restriccionPesados, carrilReversible }) {
   const [simCorridor, setSimCorridor] = useState('C3');
+  const [sortByBest, setSortByBest] = useState(true);
   const corridor = CORRIDORS.find(c => c.id === simCorridor);
   if (!corridor) return null;
 
@@ -26,45 +27,91 @@ function DepartureSimulator({ selectedDay, rainByRegion, restriccionPesados, car
   const nivelLluvia = rainByRegion[regionKey] || 0;
 
   const analysis = generarAnalisisSalida(corridor, selectedDay, nivelLluvia, restriccionPesados, carrilReversible, getTrafficVolume);
+  const sorted = sortByBest
+    ? [...analysis].sort((a, b) => a.irt - b.irt)
+    : analysis;
+
+  // Ranking labels
+  const ranked = sorted.map((a, i) => ({ ...a, rank: i + 1 }));
 
   return (
     <div className="bg-viits-card border border-viits-border rounded-lg p-3">
       <div className="flex items-center justify-between mb-2">
-        <h3 className="text-[10px] uppercase tracking-wider text-slate-500">Simulador: ¿Cuándo salir?</h3>
+        <h3 className="text-[10px] uppercase tracking-wider text-slate-500">Mejor horario para viajar</h3>
+        <button onClick={() => setSortByBest(!sortByBest)}
+          className="text-[8px] text-sky-400 hover:text-sky-300 font-mono">
+          {sortByBest ? '⏱ Por hora' : '★ Por ranking'}
+        </button>
       </div>
       <select value={simCorridor} onChange={e => setSimCorridor(e.target.value)}
-        className="w-full bg-slate-900 border border-viits-border rounded px-2 py-1 text-[10px] text-slate-300 font-mono mb-2">
+        className="w-full bg-slate-900 border border-viits-border rounded px-2 py-1 text-[10px] text-slate-300 font-mono mb-3">
         {CORRIDORS.map(c => (
           <option key={c.id} value={c.id}>{c.id} — {c.name}</option>
         ))}
       </select>
 
-      <div className="space-y-1">
-        {analysis.map(a => {
+      <div className="space-y-1.5">
+        {ranked.map(a => {
           const barW = Math.min(a.irt, 100);
+          const isBest = a.rank <= 2;
+          const isWorst = a.rank >= ranked.length - 1;
           return (
-            <div key={a.hour} className="flex items-center gap-2">
-              <span className="text-[9px] font-mono text-slate-400 w-8">{String(a.hour).padStart(2,'0')}:00</span>
-              <div className="flex-1 h-3 bg-slate-800 rounded-full overflow-hidden">
-                <div className="h-full rounded-full transition-all"
+            <div key={a.hour} className={`flex items-center gap-2 rounded px-1.5 py-1 ${
+              isBest ? 'bg-emerald-500/8 border border-emerald-500/20' : isWorst ? 'bg-red-500/5' : ''
+            }`}>
+              {/* Ranking */}
+              <span className={`text-[10px] font-bold w-4 text-center ${
+                a.rank === 1 ? 'text-emerald-400' : a.rank === 2 ? 'text-emerald-500/70' : 'text-slate-600'
+              }`}>
+                {a.rank === 1 ? '#1' : a.rank === 2 ? '#2' : `#${a.rank}`}
+              </span>
+
+              {/* Hora */}
+              <span className="text-[10px] font-mono text-slate-300 w-10 font-bold">
+                {String(a.hour).padStart(2,'0')}:00
+              </span>
+
+              {/* Barra IRT */}
+              <div className="flex-1 h-3.5 bg-slate-800/60 rounded overflow-hidden">
+                <div className="h-full rounded transition-all"
                   style={{ width: `${barW}%`, backgroundColor: a.alerta.color }} />
               </div>
-              <span className="text-[9px] font-mono w-8" style={{ color: a.alerta.color }}>{a.irt}</span>
-              <span className="text-[8px] font-mono text-slate-400 w-14">{formatTime(a.tiempo)}</span>
-              {a.recomendacion && (
-                <span className={`text-[7px] font-bold px-1 rounded ${
-                  a.recomendacion.includes('MEJOR') || a.recomendacion.includes('BUENA')
-                    ? 'bg-emerald-500/20 text-emerald-400'
-                    : a.recomendacion === 'EVITAR'
-                    ? 'bg-red-500/20 text-red-400'
-                    : 'text-amber-400'
-                }`}>
-                  {a.recomendacion === 'MEJOR OPCIÓN' ? '✅' : a.recomendacion === 'EVITAR' ? '🔴' : ''} {a.recomendacion}
+
+              {/* IRT */}
+              <span className="text-[10px] font-mono font-bold w-7 text-right" style={{ color: a.alerta.color }}>
+                {a.irt}
+              </span>
+
+              {/* Tiempo estimado */}
+              <span className="text-[9px] font-mono text-slate-400 w-12 text-right">{formatTime(a.tiempo)}</span>
+
+              {/* Badge */}
+              {a.rank === 1 && (
+                <span className="text-[7px] font-bold px-1.5 py-0.5 rounded bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 whitespace-nowrap">
+                  MEJOR
+                </span>
+              )}
+              {a.rank === 2 && (
+                <span className="text-[7px] font-bold px-1.5 py-0.5 rounded bg-emerald-500/10 text-emerald-500/70 whitespace-nowrap">
+                  BUENA
+                </span>
+              )}
+              {isWorst && a.irt >= 80 && (
+                <span className="text-[7px] font-bold px-1.5 py-0.5 rounded bg-red-500/15 text-red-400 border border-red-500/20 whitespace-nowrap">
+                  EVITAR
                 </span>
               )}
             </div>
           );
         })}
+      </div>
+
+      {/* Leyenda */}
+      <div className="flex items-center gap-3 mt-2 pt-2 border-t border-slate-800">
+        <div className="flex items-center gap-1"><div className="w-2 h-2 rounded-full bg-emerald-400" /><span className="text-[7px] text-slate-500">IRT &lt;40</span></div>
+        <div className="flex items-center gap-1"><div className="w-2 h-2 rounded-full bg-amber-400" /><span className="text-[7px] text-slate-500">40-60</span></div>
+        <div className="flex items-center gap-1"><div className="w-2 h-2 rounded-full bg-orange-400" /><span className="text-[7px] text-slate-500">60-80</span></div>
+        <div className="flex items-center gap-1"><div className="w-2 h-2 rounded-full bg-red-500" /><span className="text-[7px] text-slate-500">&gt;80</span></div>
       </div>
     </div>
   );

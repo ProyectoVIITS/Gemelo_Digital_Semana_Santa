@@ -163,30 +163,40 @@ const C7_NORMAL = [
 // DÍAS SEMANA SANTA 2026
 // ═══════════════════════════════════════════════════════════════
 export const DAYS = [
-  { index: 0, date: '29 Mar', name: 'Domingo de Ramos',       short: 'Dom 29', isHighlight: false },
-  { index: 1, date: '30 Mar', name: 'Lunes Santo',            short: 'Lun 30', isHighlight: false },
-  { index: 2, date: '31 Mar', name: 'Martes Santo',           short: 'Mar 31', isHighlight: false },
-  { index: 3, date: '1 Abr',  name: 'Miércoles Santo',       short: 'Mié 1',  isHighlight: false },
-  { index: 4, date: '2 Abr',  name: 'Jueves Santo',          short: 'Jue 2',  isHighlight: true  },
-  { index: 5, date: '3 Abr',  name: 'Viernes Santo',         short: 'Vie 3',  isHighlight: true  },
-  { index: 6, date: '4 Abr',  name: 'Sábado de Gloria',      short: 'Sáb 4',  isHighlight: false },
-  { index: 7, date: '5 Abr',  name: 'Domingo de Resurrección', short: 'Dom 5', isHighlight: true },
+  { index: 0, date: '29 Mar', name: 'Domingo de Ramos',       short: 'Dom 29', isHighlight: false, phase: 'pre-exodo' },
+  { index: 1, date: '30 Mar', name: 'Lunes Santo',            short: 'Lun 30', isHighlight: false, phase: 'pre-exodo' },
+  { index: 2, date: '31 Mar', name: 'Martes Santo',           short: 'Mar 31', isHighlight: false, phase: 'pre-exodo' },
+  { index: 3, date: '1 Abr',  name: 'Miércoles Santo',       short: 'Mié 1',  isHighlight: true,  phase: 'exodo' },
+  { index: 4, date: '2 Abr',  name: 'Jueves Santo',          short: 'Jue 2',  isHighlight: true,  phase: 'exodo' },
+  { index: 5, date: '3 Abr',  name: 'Viernes Santo',         short: 'Vie 3',  isHighlight: true,  phase: 'exodo' },
+  { index: 6, date: '4 Abr',  name: 'Sábado de Gloria',      short: 'Sáb 4',  isHighlight: true,  phase: 'retorno' },
+  { index: 7, date: '5 Abr',  name: 'Domingo de Resurrección', short: 'Dom 5', isHighlight: true,  phase: 'retorno' },
 ];
+
+// Fases operativas DITRA
+export const OPERATION_PHASES = {
+  'pre-exodo': { label: 'Operación Pre-Éxodo', color: '#f59e0b', description: 'Salidas anticipadas — restricción parcial' },
+  'exodo':     { label: 'Operación Éxodo',     color: '#ef4444', description: 'Salida masiva — 7 corredores al máximo' },
+  'retorno':   { label: 'Operación Retorno',   color: '#3b82f6', description: 'Retorno masivo a ciudades — picos 12PM-8PM' },
+};
 
 // Factor de volumen por día (normalizado, Viernes Santo = 1.0)
 // Fuente: MinTransporte distribución porcentual SS 2019-2025
 const DAY_VOLUME_FACTORS = [0.43, 0.29, 0.33, 0.52, 0.71, 1.00, 0.81, 0.64];
 
-// Tipo de día: 'exit', 'return', 'normal'
+// Tipo de día operativo DITRA: 3 fases
+// Pre-Éxodo: salidas anticipadas (Dom-Mar), perfil exit suave
+// Éxodo: salida masiva (Mié-Vie), perfil exit máximo
+// Retorno: regreso a ciudades (Sáb-Dom), perfil return con picos 12PM-8PM
 const DAY_TYPES = [
-  'exit',    // Dom Ramos — salidas
-  'normal',  // Lunes
-  'normal',  // Martes
-  'exit',    // Miércoles — pre-éxodo
-  'exit',    // Jueves Santo — pico éxodo
-  'exit',    // Viernes Santo — pico máximo
-  'return',  // Sábado Gloria — inicio retorno
-  'return',  // Domingo Resurrección — pico retorno
+  'exit',    // Dom Ramos — Pre-Éxodo: salidas anticipadas
+  'normal',  // Lunes Santo — Pre-Éxodo: flujo creciente
+  'normal',  // Martes Santo — Pre-Éxodo: acumulación
+  'exit',    // Miércoles Santo — Éxodo: salida masiva inicia
+  'exit',    // Jueves Santo — Éxodo: pico máximo salida
+  'exit',    // Viernes Santo — Éxodo: segundo pico salida
+  'return',  // Sábado Gloria — Retorno: inicio retorno progresivo
+  'return',  // Domingo Resurrección — Retorno: pico máximo retorno
 ];
 
 // Perfiles horarios por corredor

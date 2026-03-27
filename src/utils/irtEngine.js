@@ -99,11 +99,21 @@ export function calcularVelocidadPromedio(velocidadLibreKmh, irt) {
  * Obtiene el nivel de alerta basado en el IRT.
  */
 export function getNivelAlerta(irt) {
-  if (irt <= 40) return { nivel: 'normal', label: 'Flujo Normal', color: '#10b981', bgColor: 'bg-emerald-500' };
-  if (irt <= 65) return { nivel: 'precaucion', label: 'Precaución', color: '#f59e0b', bgColor: 'bg-amber-500' };
-  if (irt <= 80) return { nivel: 'congestion', label: 'Congestión', color: '#f97316', bgColor: 'bg-orange-500' };
-  if (irt <= 90) return { nivel: 'critico', label: 'CRÍTICO', color: '#ef4444', bgColor: 'bg-red-500' };
-  return { nivel: 'colapso', label: 'COLAPSO', color: '#7f1d1d', bgColor: 'bg-red-900' };
+  // Gradiente progresivo: verde → verde-claro → amarillo → ámbar → naranja → rojo → rojo oscuro
+  const color = irt <= 25 ? '#10b981'    // verde esmeralda
+    : irt <= 40 ? '#34d399'              // verde claro
+    : irt <= 50 ? '#fbbf24'              // amarillo
+    : irt <= 60 ? '#f59e0b'              // ámbar
+    : irt <= 70 ? '#fb923c'              // naranja claro
+    : irt <= 80 ? '#f97316'              // naranja fuerte
+    : irt <= 90 ? '#ef4444'              // rojo
+    : '#b91c1c';                         // rojo oscuro
+
+  const nivel = irt <= 40 ? 'normal' : irt <= 65 ? 'precaucion' : irt <= 80 ? 'congestion' : irt <= 90 ? 'critico' : 'colapso';
+  const label = { normal: 'Flujo Normal', precaucion: 'Precaución', congestion: 'Congestión', critico: 'CRÍTICO', colapso: 'COLAPSO' }[nivel];
+  const bgColor = { normal: 'bg-emerald-500', precaucion: 'bg-amber-500', congestion: 'bg-orange-500', critico: 'bg-red-500', colapso: 'bg-red-900' }[nivel];
+
+  return { nivel, label, color, bgColor };
 }
 
 /**

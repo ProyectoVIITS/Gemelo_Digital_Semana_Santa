@@ -20,7 +20,7 @@ function KPICard({ label, value, sub, color }) {
 }
 
 export default function VIITSDashboard() {
-  const [selectedDay, setSelectedDay] = useState(5);        // Viernes Santo
+  const [selectedDay, setSelectedDay] = useState(0);        // Vie 28 Mar — Inicio Éxodo
   const [selectedHour, setSelectedHour] = useState(11);
   const [rainByRegion, setRainByRegion] = useState({ andina: 0, pacifica: 0, orinoquia: 0, caribe: 0 });
   const [restriccionPesados, setRestricionPesados] = useState(false);

@@ -163,35 +163,36 @@ const C7_NORMAL = [
 // DÍAS SEMANA SANTA 2026
 // ═══════════════════════════════════════════════════════════════
 export const DAYS = [
-  { index: 0, date: '29 Mar', name: 'Domingo de Ramos',       short: 'Dom 29', isHighlight: false, phase: 'pre-exodo' },
-  { index: 1, date: '30 Mar', name: 'Lunes Santo',            short: 'Lun 30', isHighlight: false, phase: 'pre-exodo' },
-  { index: 2, date: '31 Mar', name: 'Martes Santo',           short: 'Mar 31', isHighlight: false, phase: 'pre-exodo' },
-  { index: 3, date: '1 Abr',  name: 'Miércoles Santo',       short: 'Mié 1',  isHighlight: true,  phase: 'exodo' },
-  { index: 4, date: '2 Abr',  name: 'Jueves Santo',          short: 'Jue 2',  isHighlight: true,  phase: 'exodo' },
-  { index: 5, date: '3 Abr',  name: 'Viernes Santo',         short: 'Vie 3',  isHighlight: true,  phase: 'exodo' },
-  { index: 6, date: '4 Abr',  name: 'Sábado de Gloria',      short: 'Sáb 4',  isHighlight: true,  phase: 'retorno' },
-  { index: 7, date: '5 Abr',  name: 'Domingo de Resurrección', short: 'Dom 5', isHighlight: true,  phase: 'retorno' },
+  { index: 0, date: '28 Mar', name: 'Viernes — Inicio Éxodo', short: 'Vie 28', isHighlight: true,  phase: 'exodo' },
+  { index: 1, date: '29 Mar', name: 'Domingo de Ramos',       short: 'Dom 29', isHighlight: false, phase: 'exodo' },
+  { index: 2, date: '30 Mar', name: 'Lunes Santo',            short: 'Lun 30', isHighlight: false, phase: 'exodo' },
+  { index: 3, date: '31 Mar', name: 'Martes Santo',           short: 'Mar 31', isHighlight: false, phase: 'exodo' },
+  { index: 4, date: '1 Abr',  name: 'Miércoles Santo',       short: 'Mié 1',  isHighlight: true,  phase: 'exodo' },
+  { index: 5, date: '2 Abr',  name: 'Jueves Santo',          short: 'Jue 2',  isHighlight: true,  phase: 'exodo' },
+  { index: 6, date: '3 Abr',  name: 'Viernes Santo',         short: 'Vie 3',  isHighlight: true,  phase: 'exodo' },
+  { index: 7, date: '4 Abr',  name: 'Sábado de Gloria',      short: 'Sáb 4',  isHighlight: true,  phase: 'retorno' },
+  { index: 8, date: '5 Abr',  name: 'Domingo de Resurrección', short: 'Dom 5', isHighlight: true,  phase: 'retorno' },
 ];
 
 // Fases operativas DITRA
 export const OPERATION_PHASES = {
-  'pre-exodo': { label: 'Operación Pre-Éxodo', color: '#f59e0b', description: 'Salidas anticipadas — restricción parcial' },
-  'exodo':     { label: 'Operación Éxodo',     color: '#ef4444', description: 'Salida masiva — 7 corredores al máximo' },
+  'exodo':     { label: 'Operación Éxodo',     color: '#ef4444', description: 'Salida masiva — 70% casetas salida · 30% retorno · Restricción carga ≥3.4t' },
   'retorno':   { label: 'Operación Retorno',   color: '#3b82f6', description: 'Retorno masivo a ciudades — picos 12PM-8PM' },
 };
 
 // Factor de volumen por día (normalizado, Viernes Santo = 1.0)
 // Fuente: MinTransporte distribución porcentual SS 2019-2025
-const DAY_VOLUME_FACTORS = [0.43, 0.29, 0.33, 0.52, 0.71, 1.00, 0.81, 0.64];
+// Índice 0 = Vie 28 Mar (inicio éxodo), último = Dom 5 Abr (retorno)
+const DAY_VOLUME_FACTORS = [0.55, 0.43, 0.29, 0.33, 0.52, 0.71, 1.00, 0.81, 0.64];
 
 // Tipo de día operativo DITRA: 3 fases
-// Pre-Éxodo: salidas anticipadas (Dom-Mar), perfil exit suave
-// Éxodo: salida masiva (Mié-Vie), perfil exit máximo
+// Éxodo: salida masiva (Vie 28 Mar - Vie 3 Abr), perfil exit
 // Retorno: regreso a ciudades (Sáb-Dom), perfil return con picos 12PM-8PM
 const DAY_TYPES = [
-  'exit',    // Dom Ramos — Pre-Éxodo: salidas anticipadas
-  'normal',  // Lunes Santo — Pre-Éxodo: flujo creciente
-  'normal',  // Martes Santo — Pre-Éxodo: acumulación
+  'exit',    // Vie 28 — Éxodo: inicio oficial, restricción carga 15-22h
+  'exit',    // Dom Ramos — Éxodo: salidas anticipadas
+  'exit',    // Lunes Santo — Éxodo: flujo creciente
+  'exit',    // Martes Santo — Éxodo: acumulación
   'exit',    // Miércoles Santo — Éxodo: salida masiva inicia
   'exit',    // Jueves Santo — Éxodo: pico máximo salida
   'exit',    // Viernes Santo — Éxodo: segundo pico salida
@@ -287,8 +288,8 @@ export const CORRIDORS = [
     color: CORRIDOR_COLORS.C1,
     peakDayVolume: 28000,
     incrementoVsSemNormal: 3.2,
-    mixVehicular: { livianos: 0.68, buses: 0.14, camiones: 0.18 },
-    rainProbByDay: [0.35, 0.30, 0.40, 0.45, 0.50, 0.45, 0.50, 0.55],
+    mixVehicular: { livianos: 0.72, buses: 0.18, camiones: 0.10 },
+    rainProbByDay: [0.30, 0.35, 0.30, 0.40, 0.45, 0.50, 0.45, 0.50, 0.55],
     departamentos: ['Antioquia', 'Tolima', 'Cundinamarca'],
     geoStart: { lat: 6.2476, lng: -75.5658, nombre: 'Medellín' },
     geoEnd:   { lat: 4.7110, lng: -74.0721, nombre: 'Bogotá' },
@@ -318,8 +319,8 @@ export const CORRIDORS = [
     color: CORRIDOR_COLORS.C2,
     peakDayVolume: 30000,
     incrementoVsSemNormal: 2.8,
-    mixVehicular: { livianos: 0.72, buses: 0.15, camiones: 0.13 },
-    rainProbByDay: [0.50, 0.45, 0.55, 0.60, 0.55, 0.50, 0.45, 0.50],
+    mixVehicular: { livianos: 0.75, buses: 0.18, camiones: 0.07 },
+    rainProbByDay: [0.45, 0.50, 0.45, 0.55, 0.60, 0.55, 0.50, 0.45, 0.50],
     departamentos: ['Cauca', 'Valle del Cauca', 'Risaralda'],
     geoStart: { lat: 2.4448, lng: -76.6147, nombre: 'Popayán' },
     geoEnd:   { lat: 4.7488, lng: -75.9142, nombre: 'Cartago' },
@@ -349,8 +350,8 @@ export const CORRIDORS = [
     color: CORRIDOR_COLORS.C3,
     peakDayVolume: 42000,
     incrementoVsSemNormal: 4.2,
-    mixVehicular: { livianos: 0.78, buses: 0.12, camiones: 0.10 },
-    rainProbByDay: [0.30, 0.25, 0.35, 0.45, 0.50, 0.40, 0.25, 0.20],
+    mixVehicular: { livianos: 0.78, buses: 0.18, camiones: 0.04 },
+    rainProbByDay: [0.25, 0.30, 0.25, 0.35, 0.45, 0.50, 0.40, 0.25, 0.20],
     departamentos: ['Cundinamarca', 'Tolima'],
     geoStart: { lat: 4.7110, lng: -74.0721, nombre: 'Bogotá' },
     geoEnd:   { lat: 4.3033, lng: -74.7986, nombre: 'Girardot' },
@@ -376,8 +377,8 @@ export const CORRIDORS = [
     color: CORRIDOR_COLORS.C4,
     peakDayVolume: 12000,
     incrementoVsSemNormal: 3.5,
-    mixVehicular: { livianos: 0.65, buses: 0.18, camiones: 0.17 },
-    rainProbByDay: [0.40, 0.35, 0.45, 0.50, 0.55, 0.45, 0.40, 0.45],
+    mixVehicular: { livianos: 0.68, buses: 0.24, camiones: 0.08 },
+    rainProbByDay: [0.35, 0.40, 0.35, 0.45, 0.50, 0.55, 0.45, 0.40, 0.45],
     departamentos: ['Tolima', 'Quindío'],
     geoStart: { lat: 4.4389, lng: -75.2322, nombre: 'Ibagué' },
     geoEnd:   { lat: 4.4396, lng: -75.4299, nombre: 'Cajamarca' },
@@ -402,8 +403,8 @@ export const CORRIDORS = [
     color: CORRIDOR_COLORS.C5,
     peakDayVolume: 38000,
     incrementoVsSemNormal: 4.8,
-    mixVehicular: { livianos: 0.82, buses: 0.10, camiones: 0.08 },
-    rainProbByDay: [0.35, 0.30, 0.40, 0.45, 0.50, 0.55, 0.50, 0.45],
+    mixVehicular: { livianos: 0.80, buses: 0.16, camiones: 0.04 },
+    rainProbByDay: [0.30, 0.35, 0.30, 0.40, 0.45, 0.50, 0.55, 0.50, 0.45],
     departamentos: ['Cundinamarca', 'Meta'],
     geoStart: { lat: 4.7110, lng: -74.0721, nombre: 'Bogotá' },
     geoEnd:   { lat: 4.1420, lng: -73.6266, nombre: 'Villavicencio' },
@@ -429,8 +430,8 @@ export const CORRIDORS = [
     color: CORRIDOR_COLORS.C6,
     peakDayVolume: 35000,
     incrementoVsSemNormal: 3.8,
-    mixVehicular: { livianos: 0.80, buses: 0.12, camiones: 0.08 },
-    rainProbByDay: [0.30, 0.25, 0.35, 0.40, 0.45, 0.40, 0.35, 0.30],
+    mixVehicular: { livianos: 0.78, buses: 0.18, camiones: 0.04 },
+    rainProbByDay: [0.25, 0.30, 0.25, 0.35, 0.40, 0.45, 0.40, 0.35, 0.30],
     departamentos: ['Cundinamarca', 'Boyacá'],
     geoStart: { lat: 4.7110, lng: -74.0721, nombre: 'Bogotá' },
     geoEnd:   { lat: 5.5353, lng: -73.3678, nombre: 'Tunja' },
@@ -456,8 +457,8 @@ export const CORRIDORS = [
     color: CORRIDOR_COLORS.C7,
     peakDayVolume: 34000,
     incrementoVsSemNormal: 3.0,
-    mixVehicular: { livianos: 0.85, buses: 0.10, camiones: 0.05 },
-    rainProbByDay: [0.15, 0.10, 0.15, 0.20, 0.20, 0.15, 0.10, 0.15],
+    mixVehicular: { livianos: 0.82, buses: 0.15, camiones: 0.03 },
+    rainProbByDay: [0.10, 0.15, 0.10, 0.15, 0.20, 0.20, 0.15, 0.10, 0.15],
     departamentos: ['Magdalena', 'Atlántico'],
     geoStart: { lat: 11.2408, lng: -74.2110, nombre: 'Santa Marta' },
     geoEnd:   { lat: 10.9639, lng: -74.7964, nombre: 'Barranquilla' },

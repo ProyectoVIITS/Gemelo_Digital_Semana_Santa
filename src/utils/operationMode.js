@@ -19,18 +19,25 @@ const OPERATION_CALENDAR = {
   '2026-03-22': { mode: 'retorno_progresivo', label: 'Operación Retorno · Inicio Progresivo', startHour: 14 },
   '2026-03-23': { mode: 'retorno', label: 'Operación Retorno · Lunes Festivo' },
 
-  // Días laborales con tráfico bidireccional (60% salida / 40% retorno)
+  // Días laborales previos
   '2026-03-24': { mode: 'bidireccional', label: 'Tráfico Normal · Martes' },
   '2026-03-25': { mode: 'bidireccional', label: 'Tráfico Normal · Miércoles' },
   '2026-03-26': { mode: 'bidireccional', label: 'Tráfico Normal · Jueves' },
   '2026-03-27': { mode: 'bidireccional', label: 'Presentación DITRA — MinTransporte' },
-  '2026-03-28': { mode: 'bidireccional', label: 'Tráfico Normal · Viernes' },
 
-  // Semana Santa 2026
-  '2026-04-02': { mode: 'salida',  label: 'Operación Salida · Jueves Santo' },
-  '2026-04-03': { mode: 'salida',  label: 'Operación Salida · Viernes Santo' },
-  '2026-04-04': { mode: 'retorno_progresivo', label: 'Operación Retorno · Sábado de Gloria', startHour: 12 },
-  '2026-04-05': { mode: 'retorno', label: 'Operación Retorno · Domingo de Resurrección' },
+  // ═══ OPERACIÓN ÉXODO SEMANA SANTA 2026 ═══
+  // Resolución MinTransporte: restricción carga ≥3.4t
+  // 70% casetas para SALIDA · 30% casetas para RETORNO
+  // 4,007,213 pasajeros proyectados · 336,175 vehículos desde terminales
+  '2026-03-28': { mode: 'exodo', label: 'OPERACIÓN ÉXODO · Inicio Oficial', restriccionCarga: { start: 15, end: 22 } },
+  '2026-03-29': { mode: 'exodo', label: 'OPERACIÓN ÉXODO · Domingo de Ramos' },
+  '2026-03-30': { mode: 'exodo', label: 'OPERACIÓN ÉXODO · Lunes Santo' },
+  '2026-03-31': { mode: 'exodo', label: 'OPERACIÓN ÉXODO · Martes Santo' },
+  '2026-04-01': { mode: 'exodo', label: 'OPERACIÓN ÉXODO · Miércoles Santo', restriccionCarga: { start: 12, end: 23 } },
+  '2026-04-02': { mode: 'exodo', label: 'OPERACIÓN ÉXODO · Jueves Santo', restriccionCarga: { start: 6, end: 15 } },
+  '2026-04-03': { mode: 'exodo', label: 'OPERACIÓN ÉXODO · Viernes Santo' },
+  '2026-04-04': { mode: 'retorno_progresivo', label: 'Operación Retorno · Sábado de Gloria', startHour: 12, restriccionCarga: { start: 14, end: 23 } },
+  '2026-04-05': { mode: 'retorno', label: 'Operación Retorno · Domingo de Resurrección', restriccionCarga: { start: 10, end: 23 } },
 };
 
 /**
@@ -161,6 +168,19 @@ export function getOperationMode() {
       };
     }
 
+    if (entry.mode === 'exodo') {
+      // ÉXODO: 70% casetas salida, 30% casetas retorno
+      // retornoScale = 0.30 → 30% de casetas para retorno (tráfico mínimo de entrada)
+      return {
+        mode: 'exodo',
+        label: entry.label,
+        isRetorno: false,
+        isExodo: true,
+        retornoScale: 0.30,
+        restriccionCarga: entry.restriccionCarga || null,
+      };
+    }
+
     if (entry.mode === 'bidireccional') {
       const scale = BIDIRECTIONAL_SCALE[hour] || 0.40;
       return {
@@ -200,11 +220,23 @@ export function getActiveBooths(boothConfig) {
   const opMode = getOperationMode();
   const { isRetorno, retornoScale } = opMode;
   const isBidirectional = opMode.isBidirectional || false;
+  const isExodo = opMode.isExodo || false;
   const total = boothConfig.total;
+
+  if (isExodo) {
+    // ÉXODO: 70% casetas salida, 30% casetas retorno
+    // Mínimo 1 caseta de retorno (siempre hay tráfico de entrada mínimo)
+    const retornoDeseadas = Math.max(1, Math.round(total * retornoScale));
+    const salidaActivas = total - retornoDeseadas;
+    return {
+      retornoActivas: retornoDeseadas,
+      salidaActivas,
+      totalActivas: total,
+    };
+  }
 
   if (isBidirectional) {
     // Bidireccional: distribución 60/40 — TODAS las casetas activas
-    // retornoScale = 0.40 → 40% de casetas para retorno, 60% para salida
     const retornoDeseadas = Math.max(1, Math.round(total * retornoScale));
     const salidaActivas = total - retornoDeseadas;
     return {
@@ -224,7 +256,6 @@ export function getActiveBooths(boothConfig) {
   }
 
   // Retorno: escalar casetas progresivamente
-  // Mínimo = casetas de retorno fijas, Máximo = total - 1 (dejar al menos 1 de salida)
   const retornoDeseadas = Math.round(total * retornoScale);
   const retornoActivas = Math.max(boothConfig.retorno, Math.min(retornoDeseadas, total - 1));
   const salidaActivas = total - retornoActivas;

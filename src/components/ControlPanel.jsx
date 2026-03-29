@@ -11,7 +11,6 @@ const REGIONS = [
 
 // Agrupar días por fase
 const PHASE_GROUPS = [
-  { key: 'pre-exodo', days: DAYS.filter(d => d.phase === 'pre-exodo') },
   { key: 'exodo',     days: DAYS.filter(d => d.phase === 'exodo') },
   { key: 'retorno',   days: DAYS.filter(d => d.phase === 'retorno') },
 ];
@@ -58,7 +57,7 @@ export default function ControlPanel({
                   {phase.label}
                 </span>
               </div>
-              <div className="grid grid-cols-3 gap-1 ml-3">
+              <div className={`grid gap-1 ml-3 ${group.days.length > 4 ? 'grid-cols-4' : 'grid-cols-3'}`}>
                 {group.days.map(d => (
                   <button key={d.index} onClick={() => setSelectedDay(d.index)}
                     className={`px-1 py-1.5 rounded text-[9px] font-mono transition-all border ${
@@ -112,10 +111,12 @@ export default function ControlPanel({
         {currentDay?.phase === 'exodo' && (
           <div className="mt-1.5 text-[8px] text-center" style={{ color: '#ef4444' }}>
             {selectedHour >= 5 && selectedHour <= 10
-              ? '▲ PICO ÉXODO AM — salida masiva madrugada'
+              ? '▲ PICO ÉXODO AM — salida masiva · 70% casetas salida'
               : selectedHour >= 14 && selectedHour <= 18
-              ? '▲ PICO ÉXODO PM — segundo pico de salida'
-              : '◆ Flujo sostenido de salida'}
+              ? '▲ PICO ÉXODO PM — segundo pico · restricción carga activa'
+              : selectedHour >= 15 && selectedHour <= 22 && currentDay.index === 0
+              ? '🚛 RESTRICCIÓN CARGA ≥3.4t — 3PM a 10PM'
+              : '◆ Flujo sostenido de salida · 70% casetas'}
           </div>
         )}
       </div>

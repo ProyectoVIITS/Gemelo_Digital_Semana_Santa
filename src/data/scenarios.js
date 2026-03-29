@@ -5,12 +5,25 @@
 
 export const SCENARIOS = [
   {
+    id: 'exodo-inicio',
+    name: 'Inicio Éxodo — Vie 28 Mar',
+    description: 'Primer día éxodo · 70% casetas salida · Restricción carga 3PM',
+    icon: '🚗',
+    config: {
+      selectedDay: 0,
+      selectedHour: 16,
+      rainByRegion: { andina: 0, pacifica: 0, orinoquia: 0, caribe: 0 },
+      restriccionPesados: true,
+      carrilReversible: false,
+    },
+  },
+  {
     id: 'base-2025',
     name: 'Base Histórico 2025',
     description: 'Viernes Santo · 11am · Sin lluvia · Sin medidas',
     icon: '📊',
     config: {
-      selectedDay: 5,
+      selectedDay: 6,
       selectedHour: 11,
       rainByRegion: { andina: 0, pacifica: 0, orinoquia: 0, caribe: 0 },
       restriccionPesados: false,
@@ -23,7 +36,7 @@ export const SCENARIOS = [
     description: 'Máximo volumen + lluvia intensa todas las regiones',
     icon: '⛈️',
     config: {
-      selectedDay: 5,
+      selectedDay: 6,
       selectedHour: 12,
       rainByRegion: { andina: 2, pacifica: 2, orinoquia: 2, caribe: 2 },
       restriccionPesados: false,
@@ -36,7 +49,7 @@ export const SCENARIOS = [
     description: 'Carril reversible + restricción pesados en C3/C5/C6',
     icon: '🛡️',
     config: {
-      selectedDay: 5,
+      selectedDay: 6,
       selectedHour: 11,
       rainByRegion: { andina: 1, pacifica: 0, orinoquia: 0, caribe: 0 },
       restriccionPesados: true,
@@ -49,7 +62,7 @@ export const SCENARIOS = [
     description: 'Flujos invertidos: regreso masivo a Bogotá',
     icon: '🔄',
     config: {
-      selectedDay: 7,
+      selectedDay: 8,
       selectedHour: 16,
       rainByRegion: { andina: 0, pacifica: 0, orinoquia: 0, caribe: 0 },
       restriccionPesados: false,
@@ -62,7 +75,7 @@ export const SCENARIOS = [
     description: 'C4 al límite — cola estimada >3h',
     icon: '🚧',
     config: {
-      selectedDay: 5,
+      selectedDay: 6,
       selectedHour: 10,
       rainByRegion: { andina: 1, pacifica: 0, orinoquia: 0, caribe: 0 },
       restriccionPesados: false,
@@ -75,7 +88,7 @@ export const SCENARIOS = [
     description: 'Tasajera saturado — turismo masivo Santa Marta',
     icon: '🏖️',
     config: {
-      selectedDay: 5,
+      selectedDay: 6,
       selectedHour: 14,
       rainByRegion: { andina: 0, pacifica: 0, orinoquia: 0, caribe: 0 },
       restriccionPesados: false,
@@ -88,7 +101,7 @@ export const SCENARIOS = [
     description: 'Retorno desde Medellín — Honda congestionado',
     icon: '🔴',
     config: {
-      selectedDay: 6,
+      selectedDay: 7,
       selectedHour: 9,
       rainByRegion: { andina: 0, pacifica: 0, orinoquia: 0, caribe: 0 },
       restriccionPesados: false,
@@ -98,17 +111,19 @@ export const SCENARIOS = [
 ];
 
 export const TICKER_MESSAGES = [
+  '🔴 OPERACIÓN ÉXODO ACTIVA — 70% casetas habilitadas para salida · 30% retorno · MinTransporte',
+  '🚛 RESTRICCIÓN CARGA ≥3.4t — Hoy 28 Mar: 3PM-10PM rutas Cundinamarca · Res. MinTransporte',
+  '📊 MinTransporte proyecta 4,007,213 pasajeros en 336,175 vehículos desde terminales habilitadas',
   '⚠ Vía al Llano (C5): Se esperan 55,000 vehículos el Viernes Santo — récord histórico proyectado',
   '🌧 IDEAM pronostica lluvias en Cundinamarca y Orinoquía del 31 Mar al 2 Abr — incremento 50% precipitación',
   '✅ Tercer carril Bogotá–Girardot operativo: 130 km habilitados reducen tiempo de 6h a 2h',
-  '📊 Semana Santa 2025: 9.1 millones de vehículos movilizados a nivel nacional',
-  '🚛 Restricción vehículos pesados ≥3.4 ton activa en 36 rutas nacionales de 6AM a 6PM',
-  '🔴 ANSV: 460 accidentes en SS 2025 (-60% vs 2024) — 34,000 uniformados en vías',
+  '📈 15 millones de viajeros estimados: 10M carretera + 1.8M aéreos — Semana Santa 2026',
+  '🚛 Excepciones restricción: aves, leche, carne, frutas, verduras, gasolina, ACPM, GLP — Res. 761/2013',
+  '🔴 ANSV: 4,600 policías desplegados en Cundinamarca (500 tránsito) · 34,000 uniformados nacionales',
   '🛣️ Pico y placa regional Plan Retorno: domingo 12M-8PM en 9 accesos a Bogotá',
   '⚠ Túnel La Línea (C4): Capacidad limitada 900 veh/h — colas de hasta 3h en Viernes Santo',
-  '📈 Incremento 35% flujo vehicular durante Semana Santa vs semana normal — SuperTransporte',
   '🏖️ Costa Caribe: alta demanda turística hacia Cartagena, Santa Marta y Palomino',
   '🔴 Honda (C1 KM280): Punto de colapso histórico — tiempo espera hasta 4h en Semana Santa',
   '⚠ Peaje Chusacá (C3 KM14): 42,000 veh/día proyectados — congestionamiento severo 7-11am',
-  '📊 7 corredores monitoreados · 33 peajes INVÍAS · Modelo IRT v1.0 DITRA',
+  '📊 7 corredores monitoreados · 33 peajes INVÍAS · Modelo IRT v1.0 DITRA · Éxodo SS 2026',
 ];

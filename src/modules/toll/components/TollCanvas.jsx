@@ -20,6 +20,14 @@ const VEHICLE_CATEGORIES = {
 const CATEGORY_WEIGHTS_DAY   = { M: 0.28, C1: 0.42, C2: 0.08, C3: 0.13, C4: 0.06, C5: 0.03 };
 const CATEGORY_WEIGHTS_NIGHT = { M: 0.06, C1: 0.48, C2: 0.05, C3: 0.22, C4: 0.12, C5: 0.07 };
 
+// ─── ÉXODO SEMANA SANTA: Vehículos particulares y buses dominan ───
+// MinTransporte: 4M pasajeros, 336K vehículos desde terminales
+// Muchos buses intermunicipales + particulares, pocos camiones
+const CATEGORY_WEIGHTS_EXODO_DAY   = { M: 0.22, C1: 0.48, C2: 0.22, C3: 0.05, C4: 0.02, C5: 0.01 };
+const CATEGORY_WEIGHTS_EXODO_NIGHT = { M: 0.08, C1: 0.52, C2: 0.18, C3: 0.12, C4: 0.06, C5: 0.04 };
+// Éxodo pico AM (5-10h): salida masiva, buses máximos
+const CATEGORY_WEIGHTS_EXODO_PEAK  = { M: 0.18, C1: 0.46, C2: 0.28, C3: 0.05, C4: 0.02, C5: 0.01 };
+
 // ─── RESTRICCIÓN DE CARGA PESADA ───
 // Resolución MinTransporte: festivos y puentes, vehículos ≥3.4 ton restringidos
 // 23 marzo 2026 (San José): 10:00 AM - 11:00 PM en corredor Chía-Mosquera-La Mesa-Girardot
@@ -31,11 +39,14 @@ const CARGO_RESTRICTION_CALENDAR = {
   '2026-03-21': { start: 6, end: 23 },  // Sábado puente
   '2026-03-22': { start: 6, end: 23 },  // Domingo puente
   '2026-03-23': { start: 10, end: 23 }, // Lunes festivo San José
-  // Semana Santa 2026
-  '2026-04-02': { start: 10, end: 23 }, // Jueves Santo
-  '2026-04-03': { start: 6, end: 23 },  // Viernes Santo
-  '2026-04-04': { start: 6, end: 23 },  // Sábado de Gloria
-  '2026-04-05': { start: 10, end: 23 }, // Domingo de Resurrección
+  // Semana Santa 2026 — Resolución MinTransporte
+  // Restricción: vehículos ≥3.4 ton (C3/C4/C5) prohibidos en horarios especificados
+  '2026-03-28': { start: 15, end: 22 }, // Viernes inicio éxodo — rutas Cundinamarca
+  '2026-03-29': { start: 6, end: 15 },  // Sábado — red vial nacional
+  '2026-04-01': { start: 12, end: 23 }, // Miércoles Santo — corredores éxodo
+  '2026-04-02': { start: 6, end: 15 },  // Jueves Santo — red vial nacional
+  '2026-04-04': { start: 14, end: 23 }, // Sábado de Gloria — corredor único
+  '2026-04-05': { start: 10, end: 23 }, // Domingo Resurrección — red vial nacional
 };
 
 function getColHour() {
@@ -75,19 +86,35 @@ function pickCategory() {
   const hour = getColHour();
   const isNight = hour >= 22 || hour <= 5;
   const restricted = isCargoRestricted();
-  const { isRetorno } = getOperationMode();
+  const opMode = getOperationMode();
+  const { isRetorno } = opMode;
+  const isExodo = opMode.isExodo || false;
 
   let weights;
   if (isRetorno && restricted) {
     // Retorno con restricción de carga
-    const isRetornoPeak = hour >= 18 && hour <= 23; // 54.3% viajes 6PM-12AM
-    const isRetornoMorning = hour >= 10 && hour <= 14; // Pico adelantado mañana
+    const isRetornoPeak = hour >= 18 && hour <= 23;
+    const isRetornoMorning = hour >= 10 && hour <= 14;
     if (isRetornoPeak) {
-      weights = CATEGORY_WEIGHTS_RETORNO_PEAK; // Máximo buses, mínimo motos
+      weights = CATEGORY_WEIGHTS_RETORNO_PEAK;
     } else if (isRetornoMorning) {
-      weights = CATEGORY_WEIGHTS_RETORNO_RESTRICTED; // Buses altos, motos moderadas
+      weights = CATEGORY_WEIGHTS_RETORNO_RESTRICTED;
     } else {
-      weights = CATEGORY_WEIGHTS_RESTRICTED; // Restricción base
+      weights = CATEGORY_WEIGHTS_RESTRICTED;
+    }
+  } else if (isExodo && restricted) {
+    // ÉXODO + restricción carga: CERO camiones, máximo buses y particulares
+    weights = CATEGORY_WEIGHTS_RESTRICTED;
+  } else if (isExodo) {
+    // ÉXODO sin restricción: buses y particulares dominan, pocos camiones
+    const isPeakAM = hour >= 5 && hour <= 10;
+    const isPeakPM = hour >= 14 && hour <= 18;
+    if (isPeakAM || isPeakPM) {
+      weights = CATEGORY_WEIGHTS_EXODO_PEAK;   // Máximo buses en picos
+    } else if (isNight) {
+      weights = CATEGORY_WEIGHTS_EXODO_NIGHT;
+    } else {
+      weights = CATEGORY_WEIGHTS_EXODO_DAY;
     }
   } else if (restricted) {
     weights = CATEGORY_WEIGHTS_RESTRICTED;

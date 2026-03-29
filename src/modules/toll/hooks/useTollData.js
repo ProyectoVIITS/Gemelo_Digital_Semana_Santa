@@ -53,6 +53,7 @@ const HOURLY_FLOW_PROFILE_RETORNO = [
 // Multiplicadores Semana Santa
 const SS_MULTIPLIER_SALIDA = 1.45;
 const SS_MULTIPLIER_RETORNO = 1.50; // Retorno más concentrado en pocas horas
+const SS_MULTIPLIER_EXODO = 1.65;   // Éxodo: flujo elevado de salida, buses + particulares
 
 function getHourlyFactor() {
   const hour = getColombiaHour();
@@ -62,10 +63,12 @@ function getHourlyFactor() {
 }
 
 function getActiveProfile() {
-  const { isRetorno } = getOperationMode();
+  const opMode = getOperationMode();
+  const { isRetorno } = opMode;
+  const isExodo = opMode.isExodo || false;
   return {
     flowProfile: isRetorno ? HOURLY_FLOW_PROFILE_RETORNO : HOURLY_FLOW_PROFILE_SALIDA,
-    ssMultiplier: isRetorno ? SS_MULTIPLIER_RETORNO : SS_MULTIPLIER_SALIDA,
+    ssMultiplier: isExodo ? SS_MULTIPLIER_EXODO : isRetorno ? SS_MULTIPLIER_RETORNO : SS_MULTIPLIER_SALIDA,
     baseIrtMap: isRetorno ? BASE_IRT_RETORNO : BASE_IRT,
   };
 }
@@ -176,6 +179,15 @@ function buildSnapshot(irt, stationId, realTraffic = null) {
       : isBuildUp ? 0.65
       : isLateEvening ? 0.35
       : 0.0;
+  } else if (opModeSnap.isExodo) {
+    // ÉXODO: colas altas en horas pico de salida, 70% casetas para salida
+    const isPeakAM = hour >= 5 && hour <= 10;
+    const isPeakPM = hour >= 14 && hour <= 18;
+    const isPeak = isPeakAM || isPeakPM;
+    queueFactor = isPeak ? 0.95
+      : (hour >= 11 && hour <= 13) ? 0.55
+      : (hour >= 19 && hour <= 21) ? 0.40
+      : 0.10;
   } else if (isBidirectionalSnap) {
     // BIDIRECCIONAL (días laborales): colas moderadas en horas pico
     const isPeakAM = hour >= 6 && hour <= 9;
@@ -231,10 +243,18 @@ function buildSnapshot(irt, stationId, realTraffic = null) {
         finalActive = true;
         laneDirection = 'salida';
       }
+    } else if (opMode.isExodo) {
+      // ÉXODO: 70% casetas salida, 30% retorno — todas activas
+      finalActive = true;
+      if (retornoUsed < retornoActivas) {
+        laneDirection = 'retorno';
+        retornoUsed++;
+      } else {
+        laneDirection = 'salida';
+      }
     } else if (isBidirectional) {
       // BIDIRECCIONAL: TODAS las casetas activas, 60% salida / 40% retorno
-      // Primeras N casetas (C1, C2...) son retorno, resto son salida
-      finalActive = true; // TODAS activas, zero cerradas
+      finalActive = true;
       if (retornoUsed < retornoActivas) {
         laneDirection = 'retorno';
         retornoUsed++;

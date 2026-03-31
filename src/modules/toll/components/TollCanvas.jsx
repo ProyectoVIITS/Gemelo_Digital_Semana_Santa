@@ -171,12 +171,17 @@ export default function TollCanvas({
   realTraffic = null, // Google Routes API data { currentSpeed, congestionRatio }
 }) {
   const CANVAS_H = mode === 'mini' ? 180 : 340;
-  // MAX_VEHICLES adapts to time: fewer at night to prevent visual clutter
+  // MAX_VEHICLES: adapts to time and éxodo level
   const _colHour = getColHour();
   const _isNight = _colHour >= 20 || _colHour <= 5;
+  const _opModeInit = getOperationMode();
+  const _isExodo = _opModeInit.isExodo || false;
+  const _isPeakNow = (_colHour >= 6 && _colHour <= 10) || (_colHour >= 13 && _colHour <= 18);
   const MAX_VEHICLES = _isNight
-    ? (mode === 'mini' ? 6 : 12)    // night: sparse, max 12 vehicles visible
-    : (mode === 'mini' ? 18 : 35);  // day: normal density
+    ? (mode === 'mini' ? 8 : 15)
+    : (_isExodo && _isPeakNow)
+    ? (mode === 'mini' ? 40 : 90)   // ÉXODO PICO: 90 vehículos para llenar 8+ carriles con cola
+    : (mode === 'mini' ? 25 : 55);  // Normal: más que antes para colas visibles
   const ROAD_Y_START = 0.22;
   const ROAD_Y_END = 0.82;
   const COUNT_LINE_X = 0.28;
@@ -596,11 +601,17 @@ export default function TollCanvas({
     if (activeLanes.length > 0) {
       const rawFlow = (currentMetrics.vehiclesHour || 60) / 3600;
       const gridlockSalida = _isGridlock;
+      const _isExodoNow = _opMode.isExodo || false;
+      const _isExodoPeak = _isExodoNow && ((_hour >= 6 && _hour <= 10) || (_hour >= 13 && _hour <= 18));
       const minVisualFlow = gridlockSalida
         ? (isMini ? 0.04 : 0.08)
+        : _isExodoPeak
+        ? (isMini ? 0.6 : 1.8)   // ÉXODO PICO: 1.8 veh/s → colas se forman rápido
+        : _isExodoNow
+        ? (isMini ? 0.3 : 0.8)   // ÉXODO normal: flujo alto
         : _isNight
         ? (isMini ? 0.06 : 0.12)
-        : (isMini ? 0.15 : 0.25);
+        : (isMini ? 0.15 : 0.30);
       const effectiveFlow = Math.max(gridlockSalida ? rawFlow * 0.15 : rawFlow, minVisualFlow);
 
       // Accumulate fractional spawns to guarantee eventual spawn
@@ -922,11 +933,28 @@ export default function TollCanvas({
             // Arrived at booth
             v.state = 'at-booth';
             v.speed = 0;
-            const baseWait = lane?.type === 'FacilPass' ? 0.4 + Math.random() * 0.4 : 0.8 + Math.random() * 0.6;
-            v.waitTimer = isPeakHour ? baseWait * 1.5 : baseWait;
+            // Tiempo de espera en caseta:
+            // Éxodo pico: 6-12s efectivo, 2-4s FacilPass (pago lento → cola se forma)
+            // Normal pico: 2-4s efectivo, 0.8-1.5s FacilPass
+            // Valle: 0.5-1s
+            const _isExodoAtBooth = _opMode.isExodo || false;
+            const _isExodoPeakAtBooth = _isExodoAtBooth && ((_hour >= 6 && _hour <= 10) || (_hour >= 13 && _hour <= 18));
+            let baseWait;
+            if (_isExodoPeakAtBooth) {
+              baseWait = lane?.type === 'FacilPass' ? 2 + Math.random() * 2 : 6 + Math.random() * 6;
+            } else if (isPeakHour) {
+              baseWait = lane?.type === 'FacilPass' ? 0.8 + Math.random() * 0.7 : 2 + Math.random() * 2;
+            } else {
+              baseWait = lane?.type === 'FacilPass' ? 0.4 + Math.random() * 0.4 : 0.8 + Math.random() * 0.6;
+            }
+            v.waitTimer = baseWait;
           } else {
             // ── Smooth deceleration curve approaching booth ──
-            const approachFactor = distToBooth < 150 ? 0.25 + 0.75 * (distToBooth / 150) : 1;
+            // Éxodo: frena desde más lejos para que la cola se extienda
+            const _isExodoAppr = _opMode.isExodo || false;
+            const brakeDistance = _isExodoAppr && _isPeakNow ? 250 : 150;
+            const minApproachFactor = _isExodoAppr && _isPeakNow ? 0.12 : 0.25;
+            const approachFactor = distToBooth < brakeDistance ? minApproachFactor + (1 - minApproachFactor) * (distToBooth / brakeDistance) : 1;
             v.x += v.speed * approachFactor * dt;
           }
 
@@ -953,7 +981,10 @@ export default function TollCanvas({
           v.waitTimer -= dt;
           if (v.waitTimer <= 0) {
             v.state = 'departing';
-            v.speed = 25;
+            // Velocidad de salida de caseta: lenta en éxodo para mantener densidad
+            const _isExodoDep = _opMode.isExodo || false;
+            const _isExodoPeakDep = _isExodoDep && ((_hour >= 6 && _hour <= 10) || (_hour >= 13 && _hour <= 18));
+            v.speed = _isExodoPeakDep ? 15 : (isPeakHour ? 20 : 30);
           }
           break;
         case 'departing': {

@@ -727,26 +727,48 @@ function AlertaDITRA({ corridorData }) {
         </div>
       </div>
 
-      {/* Top jams Waze */}
+      {/* Top jams Waze con links a peajes/simulación */}
       <div>
         <div className="text-[9px] uppercase tracking-wider text-slate-500 mb-1.5">
-          Top puntos de congestión Waze — Colombia ({wazeJams.length} tramos nivel ≥3)
+          Top puntos de congestión Waze — Colombia ({wazeJams.length} tramos nivel ≥3) · Click para ver simulación
         </div>
         <div className="space-y-1">
           {wazeJams.slice(0, 7).map((jam, i) => {
             const colaKm = ((jam.length || 0) / 1000).toFixed(1);
             const tiempoMin = Math.round((jam.time || 0) / 60);
-            const normalMin = Math.round((jam.historicTime || 0) / 60);
             const ratio = jam.historicTime > 0 ? (jam.time / jam.historicTime).toFixed(1) : '?';
             const hasAccident = jam.leadAlert?.type === 'ACCIDENT';
             const isClosed = jam.leadAlert?.type === 'ROAD_CLOSED';
             const levelColor = jam.jamLevel >= 4 ? '#dc2626' : '#f59e0b';
 
+            // Match con peajes VIITS: buscar peaje más cercano
+            const jamCenter = jam.line?.[Math.floor((jam.line?.length || 0) / 2)];
+            let matchedToll = null;
+            let matchedCorridor = null;
+            if (jamCenter) {
+              const R = 6371;
+              let minDist = 15; // radio máximo 15km
+              NEXUS_CORRIDORS.forEach(c => {
+                c.tollStations.forEach(t => {
+                  const dLat = (t.lat - jamCenter.y) * Math.PI / 180;
+                  const dLng = (t.lng - jamCenter.x) * Math.PI / 180;
+                  const a = Math.sin(dLat/2)**2 + Math.cos(jamCenter.y*Math.PI/180)*Math.cos(t.lat*Math.PI/180)*Math.sin(dLng/2)**2;
+                  const d = R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+                  if (d < minDist) { minDist = d; matchedToll = t; matchedCorridor = c; }
+                });
+              });
+            }
+
+            const linkUrl = matchedToll
+              ? `/monitor/${matchedCorridor.id}/${matchedToll.id.toLowerCase()}`
+              : `/monitor/waze/${jam.id || i}`;
+
             return (
-              <div key={jam.id || i} className="flex items-center gap-2 rounded px-2 py-1.5 border text-[10px]" style={{
-                backgroundColor: 'rgba(6, 17, 30, 0.5)',
-                borderColor: `${levelColor}30`,
-              }}>
+              <div key={jam.id || i}
+                className="flex items-center gap-2 rounded px-2 py-1.5 border text-[10px] cursor-pointer hover:bg-slate-800/60 transition-colors"
+                style={{ backgroundColor: 'rgba(6, 17, 30, 0.5)', borderColor: `${levelColor}30` }}
+                onClick={() => { window.location.href = linkUrl; }}
+              >
                 <div className="w-5 h-5 rounded flex items-center justify-center flex-shrink-0 font-mono font-bold text-[9px]" style={{
                   backgroundColor: `${levelColor}20`, color: levelColor,
                 }}>
@@ -758,6 +780,21 @@ function AlertaDITRA({ corridorData }) {
                     {hasAccident && <span className="ml-1 text-red-400">⚠ ACCIDENTE</span>}
                     {isClosed && <span className="ml-1 text-red-500">🚫 CERRADA</span>}
                   </div>
+                  {matchedToll && (
+                    <div className="flex items-center gap-1 mt-0.5">
+                      <span className="px-1 py-px rounded text-[8px] font-mono" style={{
+                        backgroundColor: `${matchedCorridor.color}20`, color: matchedCorridor.color,
+                      }}>{matchedCorridor.id}</span>
+                      <span className="text-[8px] text-cyan-400">→ {matchedToll.name}</span>
+                      <ChevronRight className="w-3 h-3 text-cyan-400" />
+                    </div>
+                  )}
+                  {!matchedToll && (
+                    <div className="flex items-center gap-1 mt-0.5">
+                      <span className="px-1 py-px rounded text-[8px] font-mono bg-purple-500/20 text-purple-400">WAZE</span>
+                      <span className="text-[8px] text-purple-300">Ver simulación del tramo →</span>
+                    </div>
+                  )}
                 </div>
                 <div className="flex items-center gap-3 flex-shrink-0 font-mono text-[9px]">
                   <span className="text-orange-400">{colaKm} km</span>

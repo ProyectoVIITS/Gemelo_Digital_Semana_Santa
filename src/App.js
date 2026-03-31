@@ -6,6 +6,7 @@ import ChuzacaDashboard from './pages/PeajeChuzaca';
 import MonitorPage from './pages/Monitor';
 import CorridorPage from './modules/corridor/CorridorPage';
 import TollPage from './modules/toll/TollPage';
+import WazeSegmentPage from './modules/waze/WazeSegmentPage';
 
 export default function App() {
   return (
@@ -15,6 +16,7 @@ export default function App() {
         <Route path="/semana-santa" element={<VIITSDashboard />} />
         <Route path="/peaje-chuzaca" element={<ChuzacaDashboard />} />
         <Route path="/monitor" element={<MonitorPage />} />
+        <Route path="/monitor/waze/:wazeId" element={<WazeSegmentPage />} />
         <Route path="/monitor/:corridorId" element={<CorridorPage />} />
         <Route path="/monitor/:corridorId/:tollId" element={<TollPage />} />
         <Route path="*" element={<Navigate to="/" replace />} />

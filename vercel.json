@@ -3,6 +3,8 @@
   "outputDirectory": "build",
   "framework": "create-react-app",
   "rewrites": [
-    { "source": "/(.*)", "destination": "/index.html" }
+    { "source": "/api/waze-feed", "destination": "/api/waze-feed" },
+    { "source": "/api/waze-tvt", "destination": "/api/waze-tvt" },
+    { "source": "/((?!api/).*)", "destination": "/index.html" }
   ]
 }

@@ -230,8 +230,14 @@ function mapHereSeverity(criticality) {
 // ═══════════════════════════════════════════════════════
 // 4. WAZE FEED — Alertas ciudadanas (hazards, accidentes)
 // ═══════════════════════════════════════════════════════
-const WAZE_FEED_URL = 'https://www.waze.com/row-partnerhub-api/partners/11839114302/waze-feeds/d812c9fd-ff24-446f-b7c3-5fee8b7df096?format=1';
-const WAZE_TVT_URL = 'https://www.waze.com/row-partnerhub-api/feeds-tvt/?id=1761151881648';
+// Waze URLs: usar proxy serverless en producción (CORS bloqueado), directo en dev
+const IS_PROD = window.location.hostname !== 'localhost';
+const WAZE_FEED_URL = IS_PROD
+  ? '/api/waze-feed'
+  : 'https://www.waze.com/row-partnerhub-api/partners/11839114302/waze-feeds/d812c9fd-ff24-446f-b7c3-5fee8b7df096?format=1';
+const WAZE_TVT_URL = IS_PROD
+  ? '/api/waze-tvt'
+  : 'https://www.waze.com/row-partnerhub-api/feeds-tvt/?id=1761151881648';
 const WAZE_FEED_TTL = 180000; // 3 min
 let wazeFeedCache = { data: null, ts: 0 };
 let wazeTvtCache = { data: null, ts: 0 };

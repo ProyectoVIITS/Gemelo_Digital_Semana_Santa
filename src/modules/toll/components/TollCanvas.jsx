@@ -655,10 +655,20 @@ export default function TollCanvas({
             });
           }
         } else {
-          const laneIdx = activeLanes[Math.floor(Math.random() * activeLanes.length)];
+          // Round-robin lanes para distribución uniforme
+          if (!window._salidaRR) window._salidaRR = 0;
+          const laneIdx = activeLanes[window._salidaRR % activeLanes.length];
+          window._salidaRR++;
+
+          // Verificar que no haya vehículo en la zona de spawn del mismo carril
+          const spawnZoneClear = !vehicles.some(ov =>
+            !ov.isMoto && !ov.isCounter && ov.lane === laneIdx && ov.x < catDef.width * 2 + 20
+          );
+          if (!spawnZoneClear) { spawnAccRef.current += 0.5; break; } // Retry next frame
+
           const spawnSpeed = (approachSpeedBase + Math.random() * approachSpeedVar) * catDef.speedFactor;
           vehicles.push({
-            x: -catDef.width - Math.random() * 60,
+            x: -catDef.width - 10 - Math.random() * 30,
             lane: laneIdx,
             category: cat,
             speed: spawnSpeed,
@@ -899,10 +909,11 @@ export default function TollCanvas({
       const MIN_GAP = catDef.width + 8; // minimum gap between vehicles (solid, no overlap)
 
       // ── Anti-freeze: detect stuck vehicles ──
+      // Solo forzar departing si el vehículo está genuinamente trabado, NO si está en cola
       const prevX = v._prevX || v.x;
-      if (Math.abs(v.x - prevX) < 0.3 && v.state !== 'at-booth') {
+      if (Math.abs(v.x - prevX) < 0.3 && v.state !== 'at-booth' && v.state !== 'queued') {
         v.stuckTimer = (v.stuckTimer || 0) + dt;
-        if (v.stuckTimer > 5) { v.state = 'departing'; v.speed = 30; v.stuckTimer = 0; }
+        if (v.stuckTimer > 8) { v.state = 'departing'; v.speed = 25; v.stuckTimer = 0; }
       } else {
         v.stuckTimer = 0;
       }
@@ -917,19 +928,23 @@ export default function TollCanvas({
         case 'approaching': {
           const distToBooth = boothX - v.x;
 
-          // ── Collision prevention: brake if too close to vehicle ahead ──
-          if (gapToAhead < MIN_GAP * 2.5 && gapToAhead > 0) {
-            // Smooth braking: decelerate proportionally to gap
-            const brakeFactor = Math.max(0, (gapToAhead - MIN_GAP) / (MIN_GAP * 1.5));
-            v.speed = Math.max(5, v.speed * (0.85 + 0.15 * brakeFactor));
-            v.x += v.speed * brakeFactor * dt;
+          // ── HARD STOP: nunca sobrepasar al vehículo de adelante ──
+          if (gapToAhead <= MIN_GAP && gapToAhead > 0) {
+            v.speed = 0;
+            v.x = aheadX - MIN_GAP; // Snap a posición segura
+            v.state = 'queued';
+            break;
+          }
 
-            // Hard stop if about to overlap
-            if (gapToAhead <= MIN_GAP) {
-              v.speed = 0;
-              if (effectiveQueue > 1) { v.state = 'queued'; }
-            }
-          } else if (distToBooth <= catDef.width / 2 + 4) {
+          // ── Collision prevention: freno suave cuando se acerca ──
+          if (gapToAhead < MIN_GAP * 3 && gapToAhead > MIN_GAP) {
+            const brakeFactor = (gapToAhead - MIN_GAP) / (MIN_GAP * 2);
+            v.speed = Math.max(3, v.speed * brakeFactor);
+            v.x += v.speed * dt;
+            break;
+          }
+
+          if (distToBooth <= catDef.width / 2 + 4) {
             // Arrived at booth
             v.state = 'at-booth';
             v.speed = 0;
@@ -966,15 +981,15 @@ export default function TollCanvas({
         }
         case 'queued': {
           if (aheadX === Infinity) {
-            // Nothing ahead — advance to booth
+            // Nada adelante — avanzar a la caseta
             v.state = 'approaching';
-            v.speed = 20;
-          } else if (gapToAhead > MIN_GAP + 6) {
-            // Creep forward keeping safe gap
-            const creepSpeed = Math.min(15, (gapToAhead - MIN_GAP) * 2);
+            v.speed = 15;
+          } else if (gapToAhead > MIN_GAP + 4) {
+            // Creep forward — avance lento manteniendo gap seguro
+            const creepSpeed = Math.min(10, (gapToAhead - MIN_GAP) * 1.5);
             v.x += creepSpeed * dt;
           }
-          // else: stay put, gap too small
+          // Gap <= MIN_GAP+4: quedarse quieto, cola formada correctamente
           break;
         }
         case 'at-booth':

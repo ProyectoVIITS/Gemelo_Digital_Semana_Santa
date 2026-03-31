@@ -27,6 +27,8 @@ const CATEGORY_WEIGHTS_EXODO_DAY   = { M: 0.22, C1: 0.48, C2: 0.22, C3: 0.05, C4
 const CATEGORY_WEIGHTS_EXODO_NIGHT = { M: 0.08, C1: 0.52, C2: 0.18, C3: 0.12, C4: 0.06, C5: 0.04 };
 // Éxodo pico AM (5-10h): salida masiva, buses máximos
 const CATEGORY_WEIGHTS_EXODO_PEAK  = { M: 0.18, C1: 0.46, C2: 0.28, C3: 0.05, C4: 0.02, C5: 0.01 };
+// ÉXODO PLENO pico (Jueves Santo 7-9AM, 14-16PM): máxima presión, 38% buses
+const CATEGORY_WEIGHTS_EXODO_PLENO = { M: 0.16, C1: 0.42, C2: 0.38, C3: 0.03, C4: 0.01, C5: 0.00 };
 
 // ─── RESTRICCIÓN DE CARGA PESADA ───
 // Resolución MinTransporte: festivos y puentes, vehículos ≥3.4 ton restringidos
@@ -104,13 +106,24 @@ function pickCategory() {
     }
   } else if (isExodo && restricted) {
     // ÉXODO + restricción carga: CERO camiones, máximo buses y particulares
-    weights = CATEGORY_WEIGHTS_RESTRICTED;
+    const isPleno = opMode.exodoLevel === 'pleno';
+    const isPeakAM = hour >= 7 && hour <= 9;
+    const isPeakPM = hour >= 14 && hour <= 16;
+    if (isPleno && (isPeakAM || isPeakPM)) {
+      weights = CATEGORY_WEIGHTS_EXODO_PLENO;  // 38% buses en éxodo pleno
+    } else {
+      weights = CATEGORY_WEIGHTS_RESTRICTED;
+    }
   } else if (isExodo) {
-    // ÉXODO sin restricción: buses y particulares dominan, pocos camiones
-    const isPeakAM = hour >= 5 && hour <= 10;
-    const isPeakPM = hour >= 14 && hour <= 18;
-    if (isPeakAM || isPeakPM) {
-      weights = CATEGORY_WEIGHTS_EXODO_PEAK;   // Máximo buses en picos
+    // ÉXODO sin restricción
+    const isPleno = opMode.exodoLevel === 'pleno';
+    const isPeakAM = hour >= 7 && hour <= 9;
+    const isPeakPM = hour >= 14 && hour <= 16;
+    const isPeakBroad = (hour >= 5 && hour <= 10) || (hour >= 14 && hour <= 18);
+    if (isPleno && (isPeakAM || isPeakPM)) {
+      weights = CATEGORY_WEIGHTS_EXODO_PLENO;  // 38% buses pico pleno
+    } else if (isPeakBroad) {
+      weights = CATEGORY_WEIGHTS_EXODO_PEAK;
     } else if (isNight) {
       weights = CATEGORY_WEIGHTS_EXODO_NIGHT;
     } else {

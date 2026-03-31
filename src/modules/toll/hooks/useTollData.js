@@ -53,7 +53,16 @@ const HOURLY_FLOW_PROFILE_RETORNO = [
 // Multiplicadores Semana Santa
 const SS_MULTIPLIER_SALIDA = 1.45;
 const SS_MULTIPLIER_RETORNO = 1.50; // Retorno más concentrado en pocas horas
-const SS_MULTIPLIER_EXODO = 1.65;   // Éxodo: flujo elevado de salida, buses + particulares
+const SS_MULTIPLIER_EXODO = 1.65;   // Éxodo normal: flujo elevado
+const SS_MULTIPLIER_EXODO_PLENO = 1.85; // Éxodo pleno (Jueves Santo): máxima presión
+
+// IRT boost por hora para éxodo pleno — target 98% congestión en picos
+const EXODO_PLENO_IRT_BOOST = {
+  5: 1.05, 6: 1.15, 7: 1.35, 8: 1.35, 9: 1.20,
+  10: 1.05, 11: 1.0, 12: 1.0, 13: 1.15,
+  14: 1.35, 15: 1.35, 16: 1.20, 17: 1.05,
+  18: 1.0, 19: 1.0, 20: 1.0,
+};
 
 function getHourlyFactor() {
   const hour = getColombiaHour();
@@ -66,9 +75,10 @@ function getActiveProfile() {
   const opMode = getOperationMode();
   const { isRetorno } = opMode;
   const isExodo = opMode.isExodo || false;
+  const isPleno = opMode.exodoLevel === 'pleno';
   return {
     flowProfile: isRetorno ? HOURLY_FLOW_PROFILE_RETORNO : HOURLY_FLOW_PROFILE_SALIDA,
-    ssMultiplier: isExodo ? SS_MULTIPLIER_EXODO : isRetorno ? SS_MULTIPLIER_RETORNO : SS_MULTIPLIER_SALIDA,
+    ssMultiplier: isPleno ? SS_MULTIPLIER_EXODO_PLENO : isExodo ? SS_MULTIPLIER_EXODO : isRetorno ? SS_MULTIPLIER_RETORNO : SS_MULTIPLIER_SALIDA,
     baseIrtMap: isRetorno ? BASE_IRT_RETORNO : BASE_IRT,
   };
 }
@@ -148,10 +158,17 @@ function buildSnapshot(irt, stationId, realTraffic = null) {
   // Retorno alto (IRT>65): 70-88% — congestión fuerte
   // Retorno moderado: escala normal con boost
   // ── Ocupación: override con datos reales si disponibles ──
+  // ─── Ocupación basada en modo y datos reales ───
+  const opSnap = getOperationMode();
+  const isExodoPleno = opSnap.exodoLevel === 'pleno';
+  const isPeakNow = (hour >= 7 && hour <= 9) || (hour >= 14 && hour <= 16);
+
   let occup;
   if (realTraffic && realTraffic.congestionRatio != null) {
-    // congestionRatio 0=libre, 1=parado → mapear a ocupación 10-98%
     occup = clamp(Math.round(10 + realTraffic.congestionRatio * 88 + rnd(2)), 5, 98);
+  } else if (isExodoPleno && isPeakNow && irt > 60) {
+    // ÉXODO PLENO + pico: target 98% congestión en casetas de salida
+    occup = clamp(Math.round(88 + (irt - 60) * 0.8 + rnd(2)), 88, 98);
   } else if (isRetorno && irt > 85) {
     occup = clamp(Math.round(88 + (irt - 85) * 0.8 + rnd(2)), 88, 98);
   } else if (isRetorno && irt > 65) {
@@ -179,14 +196,25 @@ function buildSnapshot(irt, stationId, realTraffic = null) {
       : isBuildUp ? 0.65
       : isLateEvening ? 0.35
       : 0.0;
+  } else if (opModeSnap.exodoLevel === 'pleno') {
+    // ÉXODO PLENO (Jueves Santo): 98% congestión en picos 7-9AM y 14-16PM
+    const isPeakAM = hour >= 7 && hour <= 9;
+    const isPeakPM = hour >= 14 && hour <= 16;
+    const isCriticalPeak = isPeakAM || isPeakPM;
+    queueFactor = isCriticalPeak ? 1.0
+      : (hour >= 5 && hour <= 6) ? 0.75
+      : (hour >= 10 && hour <= 13) ? 0.55
+      : (hour >= 17 && hour <= 18) ? 0.75
+      : (hour >= 19 && hour <= 21) ? 0.40
+      : 0.10;
   } else if (opModeSnap.isExodo) {
-    // ÉXODO: colas altas en horas pico de salida, 70% casetas para salida
+    // ÉXODO NORMAL/ALTO: colas moderadas-altas en horas pico
     const isPeakAM = hour >= 5 && hour <= 10;
     const isPeakPM = hour >= 14 && hour <= 18;
     const isPeak = isPeakAM || isPeakPM;
-    queueFactor = isPeak ? 0.95
-      : (hour >= 11 && hour <= 13) ? 0.55
-      : (hour >= 19 && hour <= 21) ? 0.40
+    queueFactor = isPeak ? 0.85
+      : (hour >= 11 && hour <= 13) ? 0.45
+      : (hour >= 19 && hour <= 21) ? 0.35
       : 0.10;
   } else if (isBidirectionalSnap) {
     // BIDIRECCIONAL (días laborales): colas moderadas en horas pico
@@ -366,17 +394,26 @@ function updateHistory(prev, irt) {
  */
 export default function useTollData(stationId, corridorId, realTraffic = null) {
   const { baseIrtMap } = getActiveProfile();
-  const baseIRT = baseIrtMap[stationId] ?? 40;
+  const opModeInit = getOperationMode();
+  const rawBaseIRT = baseIrtMap[stationId] ?? 40;
+  // Boost IRT para éxodo pleno en picos (7-9AM, 14-16PM)
+  const hourInit = getColombiaHour();
+  const boostFactor = opModeInit.exodoLevel === 'pleno' ? (EXODO_PLENO_IRT_BOOST[hourInit] || 1.0) : 1.0;
+  const baseIRT = clamp(Math.round(rawBaseIRT * boostFactor), 5, 95);
   const isHighRisk = HIGH_RISK_TOLLS.includes(stationId);
-  const { isRetorno } = getOperationMode();
+  const { isRetorno } = opModeInit;
 
   const [data, setData] = useState(() => buildSnapshot(baseIRT, stationId, realTraffic));
   const alertIdRef = useRef(0);
 
   useEffect(() => {
     const id = setInterval(() => {
+      const hour = getColombiaHour();
+      const opMode = getOperationMode();
+      const bf = opMode.exodoLevel === 'pleno' ? (EXODO_PLENO_IRT_BOOST[hour] || 1.0) : 1.0;
+      const boostedBase = clamp(Math.round(rawBaseIRT * bf), 5, 95);
       const jitter = (Math.random() - 0.48) * 8;
-      const irt = clamp(baseIRT + jitter, 5, 95);
+      const irt = clamp(boostedBase + jitter, 5, 95);
 
       setData(prev => {
         const newAlerts = [];

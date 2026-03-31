@@ -1,9 +1,11 @@
 /**
- * useTrafficAPI — 3 APIs de tráfico real → simulación VIITS NEXUS
+ * useTrafficAPI — 5 APIs de tráfico real → simulación VIITS NEXUS
  *
- * 1. Google Routes API   → velocidad real + congestión (cada 2 min)
- * 2. TomTom Traffic Flow → velocidad por segmento + confianza (cada 2 min)
- * 3. HERE Traffic        → incidentes reales: accidentes, cierres, obras (cada 2 min)
+ * 1. Google Routes API       → velocidad real + congestión (cada 2 min)
+ * 2. TomTom Traffic Flow     → velocidad por segmento + confianza (cada 2 min)
+ * 3. HERE Traffic             → incidentes reales: accidentes, cierres, obras (cada 10 min)
+ * 4. Waze Feed de Datos       → alertas ciudadanas: hazards, accidentes, potholes (cada 3 min)
+ * 5. Waze Traffic View (TVT)  → jams reales: jamLevel 0-5, longitud cola, tiempos (cada 3 min)
  *
  * Los datos fusionados alimentan useTollData y TollCanvas directamente.
  * No crea paneles nuevos — solo datos.
@@ -226,10 +228,135 @@ function mapHereSeverity(criticality) {
 }
 
 // ═══════════════════════════════════════════════════════
-// FUSIÓN — Combina las 3 APIs en un solo estado
+// 4. WAZE FEED — Alertas ciudadanas (hazards, accidentes)
 // ═══════════════════════════════════════════════════════
-function fuseTrafficData(google, tomtom, here) {
-  // Velocidad: promedio ponderado Google (50%) + TomTom (50%). Si solo hay una, usar esa.
+const WAZE_FEED_URL = 'https://www.waze.com/row-partnerhub-api/partners/11839114302/waze-feeds/d812c9fd-ff24-446f-b7c3-5fee8b7df096?format=1';
+const WAZE_TVT_URL = 'https://www.waze.com/row-partnerhub-api/feeds-tvt/?id=1761151881648';
+const WAZE_FEED_TTL = 180000; // 3 min
+let wazeFeedCache = { data: null, ts: 0 };
+let wazeTvtCache = { data: null, ts: 0 };
+
+// Haversine distance in km
+function haversine(lat1, lng1, lat2, lng2) {
+  const R = 6371, dLat = (lat2 - lat1) * Math.PI / 180, dLng = (lng2 - lng1) * Math.PI / 180;
+  const a = Math.sin(dLat / 2) ** 2 + Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) * Math.sin(dLng / 2) ** 2;
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+}
+
+async function fetchWazeFeed() {
+  if (wazeFeedCache.data && Date.now() - wazeFeedCache.ts < WAZE_FEED_TTL) return wazeFeedCache.data;
+  try {
+    const res = await fetch(WAZE_FEED_URL);
+    if (!res.ok) return wazeFeedCache.data;
+    const json = await res.json();
+    const alerts = json.alerts || [];
+    wazeFeedCache = { data: alerts, ts: Date.now() };
+    console.log(`[VIITS] 🟠 Waze Feed: ${alerts.length} alertas Colombia`);
+    return alerts;
+  } catch (e) {
+    console.warn('[VIITS] Waze Feed error:', e.message);
+    return wazeFeedCache.data || [];
+  }
+}
+
+function getWazeAlertsForStation(allAlerts, stationId) {
+  if (!allAlerts || allAlerts.length === 0) return null;
+  const seg = TOLL_SEGMENTS[stationId];
+  if (!seg) return null;
+
+  const RADIUS_KM = 5;
+  const nearby = allAlerts.filter(a =>
+    a.location && haversine(seg.tt.lat, seg.tt.lng, a.location.y, a.location.x) < RADIUS_KM
+  );
+
+  if (nearby.length === 0) return null;
+  return {
+    alertCount: nearby.length,
+    hasAccident: nearby.some(a => (a.type || '').includes('ACCIDENT')),
+    hazards: nearby.map(a => ({
+      type: a.type, subtype: a.subtype, street: a.street,
+      confidence: a.confidence, lat: a.location?.y, lng: a.location?.x,
+    })),
+    maxConfidence: Math.max(...nearby.map(a => a.confidence || 0)),
+    source: 'waze-feed',
+  };
+}
+
+// ═══════════════════════════════════════════════════════
+// 5. WAZE TRAFFIC VIEW — Jams reales con nivel y longitud
+// ═══════════════════════════════════════════════════════
+async function fetchWazeTvt() {
+  if (wazeTvtCache.data && Date.now() - wazeTvtCache.ts < WAZE_FEED_TTL) return wazeTvtCache.data;
+  try {
+    const res = await fetch(WAZE_TVT_URL);
+    if (!res.ok) return wazeTvtCache.data;
+    const json = await res.json();
+    // TVT returns irregularities array with jams
+    const jams = json.irregularities || json.jams || [];
+    wazeTvtCache = { data: jams, ts: Date.now() };
+    const totalLength = jams.reduce((s, j) => s + (j.length || 0), 0);
+    console.log(`[VIITS] 🟣 Waze TVT: ${jams.length} tramos congestión | ${Math.round(totalLength / 1000)} km total`);
+    return jams;
+  } catch (e) {
+    console.warn('[VIITS] Waze TVT error:', e.message);
+    return wazeTvtCache.data || [];
+  }
+}
+
+function getWazeJamsForStation(allJams, stationId) {
+  if (!allJams || allJams.length === 0) return null;
+  const seg = TOLL_SEGMENTS[stationId];
+  if (!seg) return null;
+
+  const RADIUS_KM = 8;
+  const nearby = allJams.filter(j => {
+    // Check bbox or line coordinates
+    if (j.line && j.line.length > 0) {
+      return j.line.some(pt => haversine(seg.tt.lat, seg.tt.lng, pt.y, pt.x) < RADIUS_KM);
+    }
+    if (j.bbox) {
+      const cLat = (j.bbox.minY + j.bbox.maxY) / 2;
+      const cLng = (j.bbox.minX + j.bbox.maxX) / 2;
+      return haversine(seg.tt.lat, seg.tt.lng, cLat, cLng) < RADIUS_KM;
+    }
+    return false;
+  });
+
+  if (nearby.length === 0) return null;
+
+  const maxJamLevel = Math.max(...nearby.map(j => j.jamLevel || 0));
+  const totalJamLength = nearby.reduce((s, j) => s + (j.length || 0), 0);
+  const avgDelay = nearby.reduce((s, j) => {
+    const realTime = j.time || 0;
+    const historicTime = j.historicTime || realTime;
+    return s + (historicTime > 0 ? realTime / historicTime : 1);
+  }, 0) / Math.max(nearby.length, 1);
+
+  // jamLevel 0-5 → congestionRatio 0-1
+  const jamCongestion = Math.min(1, maxJamLevel / 5);
+  // avgDelay ratio: 1 = normal, 2 = double time, 3+ = severe
+  const delayCongestion = Math.min(1, Math.max(0, (avgDelay - 1) / 2));
+  // Combined Waze congestion: higher of jam level and delay ratio
+  const wazeCongestion = Math.max(jamCongestion, delayCongestion);
+
+  return {
+    jamCount: nearby.length,
+    maxJamLevel,
+    totalJamLengthM: totalJamLength,
+    totalJamLengthKm: Math.round(totalJamLength / 100) / 10,
+    avgDelayRatio: Math.round(avgDelay * 100) / 100,
+    wazeCongestion,
+    // Estimate speed from delay ratio (freeSpeed / delayRatio)
+    estimatedSpeed: avgDelay > 0 ? Math.round((seg.freeSpeed || 60) / avgDelay) : null,
+    source: 'waze-tvt',
+  };
+}
+
+// ═══════════════════════════════════════════════════════
+// FUSIÓN — Combina las 5 APIs en un solo estado
+// ═══════════════════════════════════════════════════════
+function fuseTrafficData(google, tomtom, here, wazeFeed, wazeTvt) {
+  // Velocidad: promedio ponderado Google (40%) + TomTom (40%) + Waze TVT (20%)
   let currentSpeed = null;
   let freeFlowSpeed = null;
   let congestionRatio = null;
@@ -240,29 +367,53 @@ function fuseTrafficData(google, tomtom, here) {
   const congestions = [];
 
   if (google) {
-    speeds.push({ val: google.currentSpeed, w: 0.5 });
-    freeFlows.push({ val: google.freeFlowSpeed, w: 0.5 });
-    congestions.push({ val: google.congestionRatio, w: 0.5 });
-    confidence += 0.5;
+    speeds.push({ val: google.currentSpeed, w: 0.4 });
+    freeFlows.push({ val: google.freeFlowSpeed, w: 0.4 });
+    congestions.push({ val: google.congestionRatio, w: 0.4 });
+    confidence += 0.4;
   }
   if (tomtom) {
     const ttConf = Math.min(tomtom.confidence || 0.5, 1);
-    speeds.push({ val: tomtom.currentSpeed, w: 0.5 * ttConf });
-    freeFlows.push({ val: tomtom.freeFlowSpeed, w: 0.5 * ttConf });
-    congestions.push({ val: tomtom.congestionRatio, w: 0.5 * ttConf });
-    confidence += 0.5 * ttConf;
+    speeds.push({ val: tomtom.currentSpeed, w: 0.4 * ttConf });
+    freeFlows.push({ val: tomtom.freeFlowSpeed, w: 0.4 * ttConf });
+    congestions.push({ val: tomtom.congestionRatio, w: 0.4 * ttConf });
+    confidence += 0.4 * ttConf;
+  }
+  if (wazeTvt && wazeTvt.estimatedSpeed != null) {
+    speeds.push({ val: wazeTvt.estimatedSpeed, w: 0.2 });
+    congestions.push({ val: wazeTvt.wazeCongestion, w: 0.2 });
+    confidence += 0.2;
   }
 
   if (speeds.length > 0) {
     const totalW = speeds.reduce((s, x) => s + x.w, 0);
     currentSpeed = Math.round(speeds.reduce((s, x) => s + x.val * x.w, 0) / totalW);
-    freeFlowSpeed = Math.round(freeFlows.reduce((s, x) => s + x.val * x.w, 0) / totalW);
+    freeFlowSpeed = freeFlows.length > 0 ? Math.round(freeFlows.reduce((s, x) => s + x.val * x.w, 0) / freeFlows.reduce((s, x) => s + x.w, 0)) : null;
     congestionRatio = Math.min(1, congestions.reduce((s, x) => s + x.val * x.w, 0) / totalW);
   }
 
-  // Incidentes de HERE
-  const incidents = here?.incidents || [];
+  // Incidentes: fusión HERE + Waze Feed
+  const hereIncidents = here?.incidents || [];
+  const wazeAlerts = wazeFeed?.hazards?.map(h => ({
+    id: `waze-${h.type}-${h.lat}`,
+    type: h.subtype || h.type,
+    description: `Waze: ${h.subtype || h.type} en ${h.street || 'vía'}`,
+    severity: h.confidence >= 4 ? 'warning' : 'info',
+    source: 'Waze',
+  })) || [];
+  const incidents = [...hereIncidents, ...wazeAlerts];
+
   const hasRoadClosure = here?.hasRoadClosure || tomtom?.roadClosure || false;
+
+  // Waze accidente → boost congestión +10%
+  if (wazeFeed?.hasAccident && congestionRatio !== null) {
+    congestionRatio = Math.min(1, congestionRatio + 0.10);
+  }
+
+  // Waze TVT jam level ≥4 → boost congestión
+  if (wazeTvt && wazeTvt.maxJamLevel >= 4 && congestionRatio !== null) {
+    congestionRatio = Math.max(congestionRatio, 0.85);
+  }
 
   // Si hay cierre de vía, congestión al 100%
   if (hasRoadClosure && congestionRatio !== null) {
@@ -275,32 +426,36 @@ function fuseTrafficData(google, tomtom, here) {
   if (google) sources.push('Google');
   if (tomtom) sources.push('TomTom');
   if (here) sources.push('HERE');
+  if (wazeFeed) sources.push('Waze');
+  if (wazeTvt) sources.push('WazeTVT');
 
   return {
-    // Velocidad fusionada
     currentSpeed: currentSpeed ?? null,
     freeFlowSpeed: freeFlowSpeed ?? null,
     congestionRatio: congestionRatio ?? null,
     confidence: Math.min(confidence, 1),
 
-    // Incidentes reales
     incidents,
     incidentCount: incidents.length,
     hasRoadClosure,
-    hasMajorIncident: here?.hasMajorIncident || false,
+    hasMajorIncident: here?.hasMajorIncident || wazeFeed?.hasAccident || false,
 
-    // Delay
+    // Waze-specific
+    wazeJamLevel: wazeTvt?.maxJamLevel ?? null,
+    wazeJamLengthKm: wazeTvt?.totalJamLengthKm ?? null,
+    wazeAlertCount: wazeFeed?.alertCount ?? 0,
+
     delayMin: google?.delayMin || 0,
 
-    // Meta
     sources,
     sourceCount: sources.length,
     timestamp: new Date().toISOString(),
 
-    // Datos crudos por API (para debug)
     _google: google,
     _tomtom: tomtom,
     _here: here,
+    _wazeFeed: wazeFeed,
+    _wazeTvt: wazeTvt,
   };
 }
 
@@ -313,18 +468,22 @@ export function useTrafficAPI(stationId, intervalMs = 120000) {
 
   const poll = useCallback(async () => {
     if (!mountedRef.current || !stationId) return;
-    if (!GKEY && !TOMTOM_KEY && !HERE_KEY) return; // No keys configured
+    if (!GKEY && !TOMTOM_KEY && !HERE_KEY) return;
 
-    // Lanzar las 3 APIs en PARALELO
-    const [google, tomtom, here] = await Promise.all([
+    // Lanzar 5 APIs en PARALELO (Waze son globales, filtradas por estación)
+    const [google, tomtom, here, allWazeAlerts, allWazeJams] = await Promise.all([
       fetchGoogle(stationId),
       fetchTomTom(stationId),
       fetchHereIncidents(stationId),
+      fetchWazeFeed(),
+      fetchWazeTvt(),
     ]);
 
     if (!mountedRef.current) return;
 
-    const fused = fuseTrafficData(google, tomtom, here);
+    const wazeFeed = getWazeAlertsForStation(allWazeAlerts, stationId);
+    const wazeTvt = getWazeJamsForStation(allWazeJams, stationId);
+    const fused = fuseTrafficData(google, tomtom, here, wazeFeed, wazeTvt);
     setTraffic(fused);
 
     console.log(
@@ -370,15 +529,21 @@ async function pollOneStation(stationId) {
 
   // Google: solo si el cache expiró (TTL más largo: 5 min para ahorrar)
   const googleCacheEntry = googleCache[stationId];
-  const googleExpired = !googleCacheEntry || Date.now() - googleCacheEntry.ts > 300000; // 5 min
+  const googleExpired = !googleCacheEntry || Date.now() - googleCacheEntry.ts > 300000;
   const google = GKEY && googleExpired ? await fetchGoogle(stationId) : googleCacheEntry?.data || null;
 
-  // HERE: solo si el cache expiró (TTL 10 min — incidentes no cambian cada 2 min)
+  // HERE: solo si el cache expiró (TTL 10 min)
   const hereCacheEntry = hereCache[stationId];
-  const hereExpired = !hereCacheEntry || Date.now() - hereCacheEntry.ts > 600000; // 10 min
+  const hereExpired = !hereCacheEntry || Date.now() - hereCacheEntry.ts > 600000;
   const here = HERE_KEY && hereExpired ? await fetchHereIncidents(stationId) : hereCacheEntry?.data || null;
 
-  const fused = fuseTrafficData(google, tomtom, here);
+  // Waze: datos globales ya en cache (TTL 3 min), solo filtrar por estación
+  const allWazeAlerts = wazeFeedCache.data || await fetchWazeFeed();
+  const allWazeJams = wazeTvtCache.data || await fetchWazeTvt();
+  const wazeFeed = getWazeAlertsForStation(allWazeAlerts, stationId);
+  const wazeTvt = getWazeJamsForStation(allWazeJams, stationId);
+
+  const fused = fuseTrafficData(google, tomtom, here, wazeFeed, wazeTvt);
   globalTrafficStore[stationId] = fused;
   return fused;
 }

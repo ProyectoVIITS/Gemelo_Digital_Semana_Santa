@@ -27,15 +27,15 @@ const OPERATION_CALENDAR = {
 
   // ═══ OPERACIÓN ÉXODO SEMANA SANTA 2026 ═══
   // Resolución MinTransporte: restricción carga ≥3.4t
-  // 70% casetas para SALIDA · 30% casetas para RETORNO
+  // Escala por nivel de éxodo: normal (70/30), alto (75/25), pleno (80/20)
   // 4,007,213 pasajeros proyectados · 336,175 vehículos desde terminales
-  '2026-03-28': { mode: 'exodo', label: 'OPERACIÓN ÉXODO · Inicio Oficial', restriccionCarga: { start: 15, end: 22 } },
-  '2026-03-29': { mode: 'exodo', label: 'OPERACIÓN ÉXODO · Domingo de Ramos' },
-  '2026-03-30': { mode: 'exodo', label: 'OPERACIÓN ÉXODO · Lunes Santo' },
-  '2026-03-31': { mode: 'exodo', label: 'OPERACIÓN ÉXODO · Martes Santo' },
-  '2026-04-01': { mode: 'exodo', label: 'OPERACIÓN ÉXODO · Miércoles Santo', restriccionCarga: { start: 12, end: 23 } },
-  '2026-04-02': { mode: 'exodo', label: 'OPERACIÓN ÉXODO · Jueves Santo', restriccionCarga: { start: 6, end: 15 } },
-  '2026-04-03': { mode: 'exodo', label: 'OPERACIÓN ÉXODO · Viernes Santo' },
+  '2026-03-28': { mode: 'exodo', label: 'OPERACIÓN ÉXODO · Inicio Oficial', level: 'normal', restriccionCarga: { start: 15, end: 22 } },
+  '2026-03-29': { mode: 'exodo', label: 'OPERACIÓN ÉXODO · Domingo de Ramos', level: 'normal' },
+  '2026-03-30': { mode: 'exodo', label: 'OPERACIÓN ÉXODO · Lunes Santo', level: 'normal' },
+  '2026-03-31': { mode: 'exodo', label: 'OPERACIÓN ÉXODO · Martes Santo', level: 'alto' },
+  '2026-04-01': { mode: 'exodo', label: 'OPERACIÓN ÉXODO · Miércoles Santo', level: 'alto', restriccionCarga: { start: 12, end: 23 } },
+  '2026-04-02': { mode: 'exodo', label: 'OPERACIÓN ÉXODO · Jueves Santo — ÉXODO PLENO', level: 'pleno', restriccionCarga: { start: 6, end: 15 } },
+  '2026-04-03': { mode: 'exodo', label: 'OPERACIÓN ÉXODO · Viernes Santo', level: 'alto' },
   '2026-04-04': { mode: 'retorno_progresivo', label: 'Operación Retorno · Sábado de Gloria', startHour: 12, restriccionCarga: { start: 14, end: 23 } },
   '2026-04-05': { mode: 'retorno', label: 'Operación Retorno · Domingo de Resurrección', restriccionCarga: { start: 10, end: 23 } },
 };
@@ -169,14 +169,31 @@ export function getOperationMode() {
     }
 
     if (entry.mode === 'exodo') {
-      // ÉXODO: 70% casetas salida, 30% casetas retorno
-      // retornoScale = 0.30 → 30% de casetas para retorno (tráfico mínimo de entrada)
+      // ÉXODO: escala dinámica por nivel de éxodo y hora del día
+      // normal: 70/30, alto: 75/25 en picos, pleno: 80/20 en picos (98% congestión)
+      const level = entry.level || 'normal';
+      let retScale;
+      if (level === 'pleno') {
+        // ÉXODO PLENO (Jueves Santo): 80/20 en picos AM/PM
+        const isPeakAM = hour >= 7 && hour <= 9;
+        const isPeakPM = hour >= 14 && hour <= 16;
+        retScale = (isPeakAM || isPeakPM) ? 0.20 : 0.25;
+      } else if (level === 'alto') {
+        // ÉXODO ALTO (Miércoles/Viernes Santo): 75/25 en picos
+        const isPeakAM = hour >= 6 && hour <= 9;
+        const isPeakPM = hour >= 14 && hour <= 17;
+        retScale = (isPeakAM || isPeakPM) ? 0.25 : 0.30;
+      } else {
+        // ÉXODO NORMAL: 70/30 constante
+        retScale = 0.30;
+      }
       return {
         mode: 'exodo',
         label: entry.label,
         isRetorno: false,
         isExodo: true,
-        retornoScale: 0.30,
+        exodoLevel: level,
+        retornoScale: retScale,
         restriccionCarga: entry.restriccionCarga || null,
       };
     }

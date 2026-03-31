@@ -54,6 +54,29 @@ const SS_MULTIPLIERS_RETORNO = {
   C7: 1.10,
 };
 
+// ─── Perfiles IRT ÉXODO PLENO (Jueves Santo 2 Abr): picos 7-9AM y 14-16PM ───
+// Target: 98% congestión en casetas de salida durante picos
+const CORRIDOR_IRT_PROFILES_EXODO_PLENO = {
+  C1: [15,12,10,10,12,22,42,58,65,60,52,48,45,52,58,62,55,42,35,28,22,18,15,12],
+  C2: [12,10,8,8,10,18,32,45,52,48,42,38,35,38,48,52,48,38,30,25,20,15,12,10],
+  C3: [18,15,12,12,18,35,65,85,92,82,68,60,55,68,88,95,85,62,42,32,25,20,18,15],  // 7-8h: 85-92, 14-15h: 88-95
+  C4: [20,18,15,15,18,32,55,72,78,72,65,58,55,62,75,82,72,55,45,35,28,22,20,18],
+  C5: [22,18,15,15,22,42,72,88,95,88,78,68,60,68,85,98,88,58,42,30,25,22,20,18],  // 7-8h: 88-95, 14-15h: 85-98
+  C6: [15,12,10,10,14,28,48,65,72,68,58,52,48,55,68,75,65,48,35,28,22,18,15,12],
+  C7: [10,8,8,8,10,18,28,42,52,48,42,38,35,42,52,58,48,35,28,22,18,15,12,10],
+};
+
+// ─── Multiplicadores ÉXODO PLENO ───
+const SS_MULTIPLIERS_EXODO_PLENO = {
+  C1: 1.25,
+  C2: 1.15,
+  C3: 1.55,  // Máxima presión salida Bogotá→Girardot
+  C4: 1.30,  // Túnel La Línea congestionado
+  C5: 1.60,  // Bogotá→Villavicencio: récord histórico
+  C6: 1.45,  // Bogotá→Tunja: turismo religioso
+  C7: 1.20,
+};
+
 function generateTollData(station, corridorSpeedLimit, corridorIrt) {
   const isHighRisk = HIGH_RISK_TOLLS.includes(station.id);
   const isCritical = station.isCritical;
@@ -85,9 +108,22 @@ function generateTollData(station, corridorSpeedLimit, corridorIrt) {
 }
 
 function generateCorridorData(corridor, hour) {
-  const { isRetorno } = getOperationMode();
-  const profiles = isRetorno ? CORRIDOR_IRT_PROFILES_RETORNO : CORRIDOR_IRT_PROFILES_SALIDA;
-  const multipliers = isRetorno ? SS_MULTIPLIERS_RETORNO : SS_MULTIPLIERS_SALIDA;
+  const opMode = getOperationMode();
+  const { isRetorno } = opMode;
+  const isPleno = opMode.exodoLevel === 'pleno';
+  const isPlenoPeak = isPleno && ((hour >= 7 && hour <= 9) || (hour >= 14 && hour <= 16));
+
+  let profiles, multipliers;
+  if (isPlenoPeak) {
+    profiles = CORRIDOR_IRT_PROFILES_EXODO_PLENO;
+    multipliers = SS_MULTIPLIERS_EXODO_PLENO;
+  } else if (isRetorno) {
+    profiles = CORRIDOR_IRT_PROFILES_RETORNO;
+    multipliers = SS_MULTIPLIERS_RETORNO;
+  } else {
+    profiles = CORRIDOR_IRT_PROFILES_SALIDA;
+    multipliers = SS_MULTIPLIERS_SALIDA;
+  }
   const baseIrt = profiles[corridor.id]?.[hour] || 40;
   const ssMultiplier = multipliers[corridor.id] || 1.0;
   const irt = Math.max(0, Math.min(100,

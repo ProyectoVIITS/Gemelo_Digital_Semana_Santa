@@ -8,7 +8,7 @@ import { MapContainer, TileLayer, Polyline, CircleMarker, Tooltip as LTooltip, u
 import { ArrowLeft, Shield, Wifi, Activity, AlertTriangle, Gauge, ChevronRight, Radio, TrendingUp, Car, BarChart2 } from 'lucide-react';
 import { LineChart, Line, AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import { NEXUS_CORRIDORS, getIRTLevel, TOTAL_TOLL_STATIONS, CORRIDOR_COLORS } from '../../data/nexusCorridors';
-import { getOperationMode } from '../../utils/operationMode';
+import { getOperationMode, getColombiaHour } from '../../utils/operationMode';
 import { useCorridorData } from '../../hooks/useCorridorData';
 import { useGlobalAlerts } from '../../hooks/useGlobalAlerts';
 import { useAccidentData } from '../../hooks/useAccidentData';
@@ -641,6 +641,146 @@ function AccidentLegend({ accData }) {
   );
 }
 
+/* ─── ALERTA DITRA: Panel de congestión en tiempo real para reporte Policía ─── */
+function AlertaDITRA({ corridorData }) {
+  const [wazeJams, setWazeJams] = React.useState([]);
+  const [lastUpdate, setLastUpdate] = React.useState(null);
+  const hour = getColombiaHour();
+
+  // Solo visible entre 5AM y 23PM (siempre activo en horario operativo éxodo)
+  const isVisible = hour >= 5 && hour <= 23;
+
+  React.useEffect(() => {
+    if (!isVisible) return;
+    async function fetchWaze() {
+      try {
+        const IS_PROD = window.location.hostname !== 'localhost';
+        const url = IS_PROD ? '/api/waze-tvt' : 'https://www.waze.com/row-partnerhub-api/feeds-tvt/?id=1761151881648';
+        const res = await fetch(url);
+        if (!res.ok) return;
+        const json = await res.json();
+        const jams = (json.irregularities || [])
+          .filter(j => j.jamLevel >= 3)
+          .sort((a, b) => {
+            if (b.jamLevel !== a.jamLevel) return b.jamLevel - a.jamLevel;
+            return (b.length || 0) - (a.length || 0);
+          })
+          .slice(0, 10);
+        setWazeJams(jams);
+        setLastUpdate(new Date());
+      } catch (e) { /* silently fail */ }
+    }
+    fetchWaze();
+    const id = setInterval(fetchWaze, 180000); // cada 3 min
+    return () => clearInterval(id);
+  }, [isVisible]);
+
+  if (!isVisible || wazeJams.length === 0) return null;
+
+  // Top 5 corredores VIITS por IRT
+  const topCorridors = NEXUS_CORRIDORS
+    .map(c => ({ ...c, irt: corridorData[c.id]?.irt || 0 }))
+    .sort((a, b) => b.irt - a.irt)
+    .slice(0, 5);
+
+  const isPeakAlert = hour >= 17 && hour <= 19;
+
+  return (
+    <div className="rounded-lg border-2 p-4 mb-3" style={{
+      backgroundColor: 'rgba(220, 38, 38, 0.06)',
+      borderColor: isPeakAlert ? '#dc2626' : '#f59e0b',
+      animation: isPeakAlert ? 'pulse 2s infinite' : 'none',
+    }}>
+      <style>{`@keyframes pulse { 0%,100% { border-color: #dc2626; } 50% { border-color: #7f1d1d; } }`}</style>
+
+      <div className="flex items-center gap-3 mb-3">
+        <div className="w-8 h-8 rounded-full flex items-center justify-center" style={{
+          backgroundColor: isPeakAlert ? 'rgba(220, 38, 38, 0.2)' : 'rgba(245, 158, 11, 0.2)',
+        }}>
+          <AlertTriangle className="w-4 h-4" style={{ color: isPeakAlert ? '#dc2626' : '#f59e0b' }} />
+        </div>
+        <div>
+          <div className="text-xs font-bold uppercase tracking-wider" style={{ color: isPeakAlert ? '#dc2626' : '#f59e0b' }}>
+            {isPeakAlert ? '🚨 ALERTA DITRA — REPORTE POLICÍA NACIONAL' : '⚠ MONITOR DE CONGESTIÓN VIAL — DITRA'}
+          </div>
+          <div className="text-[9px] text-slate-400">
+            Datos Waze en tiempo real · {lastUpdate ? lastUpdate.toLocaleTimeString('es-CO', { timeZone: 'America/Bogota', hour: '2-digit', minute: '2-digit' }) : '...'} · Semana Santa 2026
+          </div>
+        </div>
+      </div>
+
+      {/* Top corredores VIITS por IRT */}
+      <div className="mb-3">
+        <div className="text-[9px] uppercase tracking-wider text-slate-500 mb-1.5">Corredores VIITS — IRT más alto</div>
+        <div className="grid grid-cols-5 gap-1.5">
+          {topCorridors.map(c => {
+            const level = getIRTLevel(c.irt);
+            return (
+              <div key={c.id} className="rounded px-2 py-1.5 text-center border" style={{
+                backgroundColor: `${level.color}10`, borderColor: `${level.color}30`,
+              }}>
+                <div className="font-mono text-sm font-bold" style={{ color: level.color }}>{c.irt}</div>
+                <div className="text-[8px] text-slate-400 truncate">{c.shortName}</div>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* Top jams Waze */}
+      <div>
+        <div className="text-[9px] uppercase tracking-wider text-slate-500 mb-1.5">
+          Top puntos de congestión Waze — Colombia ({wazeJams.length} tramos nivel ≥3)
+        </div>
+        <div className="space-y-1">
+          {wazeJams.slice(0, 7).map((jam, i) => {
+            const colaKm = ((jam.length || 0) / 1000).toFixed(1);
+            const tiempoMin = Math.round((jam.time || 0) / 60);
+            const normalMin = Math.round((jam.historicTime || 0) / 60);
+            const ratio = jam.historicTime > 0 ? (jam.time / jam.historicTime).toFixed(1) : '?';
+            const hasAccident = jam.leadAlert?.type === 'ACCIDENT';
+            const isClosed = jam.leadAlert?.type === 'ROAD_CLOSED';
+            const levelColor = jam.jamLevel >= 4 ? '#dc2626' : '#f59e0b';
+
+            return (
+              <div key={jam.id || i} className="flex items-center gap-2 rounded px-2 py-1.5 border text-[10px]" style={{
+                backgroundColor: 'rgba(6, 17, 30, 0.5)',
+                borderColor: `${levelColor}30`,
+              }}>
+                <div className="w-5 h-5 rounded flex items-center justify-center flex-shrink-0 font-mono font-bold text-[9px]" style={{
+                  backgroundColor: `${levelColor}20`, color: levelColor,
+                }}>
+                  {jam.jamLevel}
+                </div>
+                <div className="flex-1 min-w-0">
+                  <div className="text-slate-300 truncate font-medium">
+                    {jam.name || 'Tramo sin nombre'}
+                    {hasAccident && <span className="ml-1 text-red-400">⚠ ACCIDENTE</span>}
+                    {isClosed && <span className="ml-1 text-red-500">🚫 CERRADA</span>}
+                  </div>
+                </div>
+                <div className="flex items-center gap-3 flex-shrink-0 font-mono text-[9px]">
+                  <span className="text-orange-400">{colaKm} km</span>
+                  <span className="text-red-400">{tiempoMin} min</span>
+                  <span className="text-slate-500">{ratio}x</span>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+
+      {isPeakAlert && (
+        <div className="mt-3 pt-2 border-t text-center" style={{ borderColor: 'rgba(220, 38, 38, 0.2)' }}>
+          <div className="text-[9px] text-red-400 font-mono">
+            REPORTE GENERADO PARA POLICÍA NACIONAL · DITRA · MINTRANSPORTE · {new Date().toLocaleDateString('es-CO', { timeZone: 'America/Bogota' })}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function MonitorPage() {
   const [loading, setLoading] = useState(true);
   const [clock, setClock] = useState(new Date());
@@ -670,6 +810,9 @@ export default function MonitorPage() {
       <MonitorHeader globalMetrics={globalMetrics} clock={clock} />
 
       <main className="max-w-[1600px] mx-auto px-3 py-3">
+        {/* ALERTA DITRA — Panel de congestión para reporte Policía */}
+        <AlertaDITRA corridorData={corridorData} />
+
         {/* Global KPIs */}
         <GlobalKPIs globalMetrics={globalMetrics} alertCount={alerts.length} />
 

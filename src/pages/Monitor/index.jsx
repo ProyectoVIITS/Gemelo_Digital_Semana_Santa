@@ -660,7 +660,7 @@ function AlertaDITRA({ corridorData }) {
         if (!res.ok) return;
         const json = await res.json();
         const jams = (json.irregularities || [])
-          .filter(j => j.jamLevel >= 3)
+          .filter(j => j.jamLevel >= 3 && j.type !== 'STATIC') // Excluir eventos estáticos (procesiones, cierres programados)
           .sort((a, b) => {
             if (b.jamLevel !== a.jamLevel) return b.jamLevel - a.jamLevel;
             return (b.length || 0) - (a.length || 0);

@@ -2,13 +2,15 @@
  * WazeSegmentPage — Simulación visual de tramos congestionados Waze
  * Replica la estructura de TollPage pero con datos Waze TVT en tiempo real
  */
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Link, useParams } from 'react-router-dom';
-import { ArrowLeft, Shield, Wifi, AlertTriangle, Activity, Radio } from 'lucide-react';
-import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
+import { ArrowLeft, Shield, Wifi, AlertTriangle, Activity, Radio, TrendingDown, Clock } from 'lucide-react';
+import { AreaChart, Area, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, ReferenceLine, Cell } from 'recharts';
 import TollCanvas from '../toll/components/TollCanvas';
 import useWazeSegmentData from './useWazeSegmentData';
 import { getIRTLevel } from '../../data/nexusCorridors';
+import { getColombiaHour } from '../../utils/operationMode';
+import CongestionForecast from '../../components/shared/CongestionForecast';
 
 const CARD = { backgroundColor: 'rgba(13, 26, 46, 0.6)', borderColor: '#1a2d4a' };
 
@@ -199,6 +201,13 @@ export default function WazeSegmentPage() {
                 </ResponsiveContainer>
               </div>
             </div>
+
+            {/* ═══ PROYECCIÓN DE CONGESTIÓN — Siguiente 8 horas ═══ */}
+            <CongestionForecast
+              currentIrt={data.metrics.irt || 0}
+              accentColor="#a855f7"
+              delayRatio={jam?.historicTime > 0 ? (jam.time / jam.historicTime).toFixed(1) : null}
+            />
           </div>
 
           {/* Right: TollCanvas + Lanes + Alerts */}

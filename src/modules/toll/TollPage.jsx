@@ -12,6 +12,7 @@ import TollCanvas from './components/TollCanvas';
 import LoadingScreen from '../../components/shared/LoadingScreen';
 import { getOperationMode } from '../../utils/operationMode';
 import { useGlobalTraffic } from '../../hooks/useTrafficAPI';
+import CongestionForecast from '../../components/shared/CongestionForecast';
 
 const CARD = { backgroundColor: 'rgba(13, 26, 46, 0.6)', borderColor: '#1a2d4a' };
 
@@ -341,6 +342,7 @@ export default function TollPage() {
 
             <SensorPanel metrics={data.metrics} corridorColor={corridor.color} speedLimit={toll.speedLimit} />
             <SpeedChart history={data.speedHistory} speedLimit={toll.speedLimit} corridorColor={corridor.color} />
+            <CongestionForecast currentIrt={data.metrics.irt || 0} accentColor={corridor.color} />
           </div>
         </div>
       </main>

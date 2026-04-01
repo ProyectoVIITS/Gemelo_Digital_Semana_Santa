@@ -70,6 +70,14 @@ const TOLL_SEGMENTS = {
   'C7-04': S(10.978719, -74.729719, 80), // Laureano Gómez
   'C7-05': S(10.799582, -74.759003, 80), // Sabanagrande
   'C7-06': S(10.837545, -74.902122, 80), // Galapa
+  // Autopistas del Café — 7 peajes (Fiscalización MinTransporte)
+  'ADC-01': S(5.0483, -75.4855, 60),  // Pavas (Manizales)
+  'ADC-02': S(5.0355, -75.5121, 60),  // San Bernardo (Manizales)
+  'ADC-03': S(5.0713, -75.5977, 80),  // Santágueda (Palestina)
+  'ADC-04': S(4.9846, -75.6328, 80),  // Tarapacá I (Chinchiná)
+  'ADC-05': S(4.8923, -75.6261, 80),  // Tarapacá II (Santa Rosa)
+  'ADC-06': S(4.6189, -75.6371, 80),  // Circasia (Filandia/Circasia)
+  'ADC-07': S(4.4080, -75.8999, 80),  // Corozal (La Victoria)
 };
 
 // ── Caches por API ──

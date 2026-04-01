@@ -154,11 +154,12 @@ export function useFiscalizacionPeaje(peajeId, trafficData = null) {
  * Hook: datos agregados de TODOS los 7 peajes
  * Para el dashboard principal de fiscalización
  */
-export function useFiscalizacionGlobal(allTrafficData = {}) {
-  const [data, setData] = useState({ peajes: [], totalVehiculos: 0, totalIngresos: 0, history: {} });
+export function useFiscalizacionGlobal() {
+  const [data, setData] = useState({ peajes: [], totalVehiculos: 0, totalIngresos: 0, history: [] });
 
   useEffect(() => {
     function update() {
+      const allTrafficData = {}; // No dependency on external traffic for now
       const hour = getColombiaHour();
       const history = loadHistory();
       const dateStr = getColombiaDateStr();
@@ -205,7 +206,7 @@ export function useFiscalizacionGlobal(allTrafficData = {}) {
     update();
     const id = setInterval(update, 5000);
     return () => clearInterval(id);
-  }, [allTrafficData]);
+  }, []); // No external dependencies — self-contained polling
 
   return data;
 }

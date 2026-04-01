@@ -3,7 +3,7 @@
  * Autopistas del Café · Contrato 113/1997 INVÍAS
  * CONFIDENCIAL — Solo MinTransporte / DITRA
  */
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { Link } from 'react-router-dom';
 import { MapContainer, TileLayer, CircleMarker, Tooltip as LTooltip } from 'react-leaflet';
 import { ArrowLeft, Shield, Lock, Eye, DollarSign, Car, TrendingUp, BarChart2 } from 'lucide-react';
@@ -24,7 +24,7 @@ function formatCOP(n) {
 
 export default function FiscalizacionPage() {
   const [clock, setClock] = useState(new Date());
-  const fiscData = useFiscalizacionGlobal();
+  const fiscData = useFiscalizacionGlobal(); // Self-contained, no external deps
 
   useEffect(() => {
     const t = setInterval(() => setClock(new Date()), 1000);

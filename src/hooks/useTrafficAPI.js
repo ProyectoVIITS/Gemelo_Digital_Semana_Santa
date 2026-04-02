@@ -654,4 +654,103 @@ export function useAllTrafficData() {
 // ── Export lista de estaciones con segmento para verificar cobertura ──
 export const SUPPORTED_STATIONS = ALL_STATIONS;
 
+// ═══════════════════════════════════════════════════════
+// HOURLY SNAPSHOT — Análisis cada hora para sincronizar con realidad
+// Registra el estado de congestión de las APIs cada hora en localStorage
+// Permite al sistema ajustar IRT basado en datos reales acumulados
+// ═══════════════════════════════════════════════════════
+const LS_HOURLY_KEY = 'viits_hourly_traffic';
+
+function getColHourForSnapshot() {
+  return parseInt(new Date().toLocaleString('en-US', { hour: 'numeric', hour12: false, timeZone: 'America/Bogota' }), 10);
+}
+
+function getColDateForSnapshot() {
+  const now = new Date();
+  const y = now.toLocaleString('en-US', { year: 'numeric', timeZone: 'America/Bogota' });
+  const m = now.toLocaleString('en-US', { month: '2-digit', timeZone: 'America/Bogota' });
+  const d = now.toLocaleString('en-US', { day: '2-digit', timeZone: 'America/Bogota' });
+  return `${y}-${m}-${d}`;
+}
+
+let lastSnapshotHour = -1;
+
+function saveHourlySnapshot() {
+  const hour = getColHourForSnapshot();
+  if (hour === lastSnapshotHour) return; // Ya se guardó esta hora
+  lastSnapshotHour = hour;
+
+  const dateStr = getColDateForSnapshot();
+  const snapshot = {};
+  let totalCongestion = 0;
+  let stationsWithData = 0;
+
+  ALL_STATIONS.forEach(sid => {
+    const d = globalTrafficStore[sid];
+    if (d && d.congestionRatio != null) {
+      snapshot[sid] = {
+        speed: d.currentSpeed,
+        congestion: Math.round(d.congestionRatio * 100),
+        sources: d.sources?.join('+') || '?',
+        wazeJamLevel: d.wazeJamLevel,
+        wazeJamKm: d.wazeJamLengthKm,
+        incidents: d.incidentCount,
+      };
+      totalCongestion += d.congestionRatio;
+      stationsWithData++;
+    }
+  });
+
+  const avgCongestion = stationsWithData > 0 ? Math.round((totalCongestion / stationsWithData) * 100) : 0;
+
+  try {
+    const raw = localStorage.getItem(LS_HOURLY_KEY);
+    const history = raw ? JSON.parse(raw) : {};
+    if (!history[dateStr]) history[dateStr] = {};
+    history[dateStr][hour] = {
+      timestamp: new Date().toISOString(),
+      avgCongestion,
+      stationsWithData,
+      totalStations: ALL_STATIONS.length,
+      snapshot,
+    };
+
+    // Limpiar días > 3
+    const dates = Object.keys(history).sort();
+    while (dates.length > 3) { delete history[dates.shift()]; }
+
+    localStorage.setItem(LS_HOURLY_KEY, JSON.stringify(history));
+    console.log(`[VIITS Hourly] 📊 Snapshot hora ${hour}:00 — congestión promedio: ${avgCongestion}% — ${stationsWithData}/${ALL_STATIONS.length} estaciones con datos`);
+  } catch (e) {
+    console.warn('[VIITS Hourly] Error guardando snapshot:', e.message);
+  }
+}
+
+// Ejecutar snapshot cada 5 minutos (captura el cambio de hora)
+setInterval(saveHourlySnapshot, 300000);
+// Primera ejecución inmediata
+setTimeout(saveHourlySnapshot, 10000);
+
+/**
+ * Hook: obtener historial horario del día
+ * Para que componentes puedan ver la evolución real de congestión
+ */
+export function useHourlyTrafficHistory() {
+  const [history, setHistory] = useState({});
+
+  useEffect(() => {
+    function load() {
+      try {
+        const raw = localStorage.getItem(LS_HOURLY_KEY);
+        setHistory(raw ? JSON.parse(raw) : {});
+      } catch { setHistory({}); }
+    }
+    load();
+    const id = setInterval(load, 60000); // refresh cada minuto
+    return () => clearInterval(id);
+  }, []);
+
+  return history;
+}
+
 export default useTrafficAPI;

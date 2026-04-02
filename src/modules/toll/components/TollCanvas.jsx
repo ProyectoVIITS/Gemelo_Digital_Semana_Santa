@@ -177,8 +177,8 @@ export default function TollCanvas({
   const _opModeInit = getOperationMode();
   const _isExodo = _opModeInit.isExodo || false;
   const _isPleno = _opModeInit.exodoLevel === 'pleno';
-  // Éxodo pleno: todo el día es pico (6AM-8PM sin huecos)
-  const _isPeakNow = _isPleno ? (_colHour >= 6 && _colHour <= 20) : ((_colHour >= 6 && _colHour <= 10) || (_colHour >= 13 && _colHour <= 18));
+  // Picos basados en hora — NO forzar colapso, dejar que APIs reales determinen
+  const _isPeakNow = (_colHour >= 6 && _colHour <= 10) || (_colHour >= 13 && _colHour <= 18);
   const MAX_VEHICLES = _isNight
     ? (mode === 'mini' ? 8 : 15)
     : (_isPleno && _isPeakNow)
@@ -585,9 +585,9 @@ export default function TollCanvas({
     const _isNight = _hour >= 20 || _hour <= 5;
     const _isGridlock = _isRetorno && _retScale >= 0.75 && _hour >= 13 && _hour <= 20;
     const _isPlenoFrame = _opMode.exodoLevel === 'pleno';
-    // Éxodo pleno: congestión SOSTENIDA 6AM-8PM sin huecos (Jueves Santo = colapso todo el día)
-    const _isPeakFrame = (_hour >= 6 && _hour <= 20);
-    const _isPlenoColapso = _isPlenoFrame && _isPeakFrame;
+    const _isPeakFrame = (_hour >= 6 && _hour <= 10) || (_hour >= 13 && _hour <= 18);
+    // Colapso solo cuando APIs reales confirman congestión alta (congestionRatio > 0.5)
+    const _isPlenoColapso = _isPlenoFrame && _isPeakFrame && _hasRealTraffic && _rt.congestionRatio > 0.5;
 
     // ── REAL TRAFFIC from Google Routes API ──
     // Si hay datos reales, overrideamos velocidades del canvas

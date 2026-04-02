@@ -565,39 +565,89 @@ async function pollOneStation(stationId) {
   return fused;
 }
 
+// ── Heartbeat & connectivity tracking ──
+let consecutiveFailures = 0;
+let lastSuccessfulPoll = Date.now();
+let pollingIntervalId = null;
+
 function startGlobalPolling() {
   if (globalPollingStarted) return;
-  if (!GKEY && !TOMTOM_KEY && !HERE_KEY) return;
   globalPollingStarted = true;
 
-  console.log(`[VIITS Traffic] 🌐 Iniciando polling global: ${ALL_STATIONS.length} peajes`);
+  console.log(`[VIITS Traffic] 🌐 Iniciando polling global: ${ALL_STATIONS.length} peajes | APIs: Google${GKEY?'✅':'❌'} HERE${HERE_KEY?'✅':'❌'} Waze✅`);
 
-  // Poll 2 stations every 4 seconds → all 37 done in ~74 seconds → cycle repeats
   const BATCH_SIZE = 2;
-  const INTERVAL_MS = 4000; // 4s between batches
+  const INTERVAL_MS = 4000;
 
-  setInterval(async () => {
+  pollingIntervalId = setInterval(async () => {
     for (let b = 0; b < BATCH_SIZE; b++) {
       const stationId = ALL_STATIONS[globalRRIndex % ALL_STATIONS.length];
       globalRRIndex++;
       try {
-        await pollOneStation(stationId);
+        const result = await pollOneStation(stationId);
+        if (result && result.sourceCount > 0) {
+          consecutiveFailures = 0;
+          lastSuccessfulPoll = Date.now();
+        }
       } catch (e) {
-        console.warn(`[VIITS] polling ${stationId} failed:`, e.message);
+        consecutiveFailures++;
+        if (consecutiveFailures % 20 === 0) {
+          console.warn(`[VIITS] ⚠ ${consecutiveFailures} fallos consecutivos — última conexión exitosa: ${Math.round((Date.now() - lastSuccessfulPoll) / 60000)} min`);
+        }
       }
     }
   }, INTERVAL_MS);
 
-  // Initial burst: poll all stations sequentially with small delay
+  // Initial burst
   (async () => {
     for (let i = 0; i < ALL_STATIONS.length; i++) {
-      try {
-        await pollOneStation(ALL_STATIONS[i]);
-      } catch (e) { /* skip */ }
-      await new Promise(r => setTimeout(r, 800)); // 800ms between initial polls
+      try { await pollOneStation(ALL_STATIONS[i]); } catch (e) { /* skip */ }
+      await new Promise(r => setTimeout(r, 800));
     }
-    console.log(`[VIITS Traffic] 🌐 Primera ronda completa: ${ALL_STATIONS.length} peajes consultados`);
+    console.log(`[VIITS Traffic] 🌐 Primera ronda completa: ${ALL_STATIONS.length} peajes`);
+    lastSuccessfulPoll = Date.now();
   })();
+
+  // ── HEARTBEAT: cada 60s verifica que el polling sigue vivo ──
+  setInterval(() => {
+    const minutesSinceSuccess = Math.round((Date.now() - lastSuccessfulPoll) / 60000);
+    const stationsWithData = Object.keys(globalTrafficStore).length;
+
+    if (minutesSinceSuccess > 10) {
+      console.error(`[VIITS] 🔴 DESCONECTADO — ${minutesSinceSuccess} min sin datos. Reiniciando polling...`);
+      // Forzar refresh de caches
+      Object.keys(googleCache).forEach(k => delete googleCache[k]);
+      Object.keys(hereCache).forEach(k => delete hereCache[k]);
+      wazeFeedCache = { data: null, ts: 0 };
+      wazeTvtCache = { data: null, ts: 0 };
+      consecutiveFailures = 0;
+    } else if (minutesSinceSuccess > 3) {
+      console.warn(`[VIITS] 🟡 Conexión degradada — ${minutesSinceSuccess} min desde último dato exitoso`);
+    }
+
+    // Log horario del estado
+    const now = new Date();
+    const minute = parseInt(now.toLocaleString('en-US', { minute: 'numeric', timeZone: 'America/Bogota' }));
+    if (minute === 0 || minute === 30) {
+      const hour = parseInt(now.toLocaleString('en-US', { hour: 'numeric', hour12: false, timeZone: 'America/Bogota' }));
+      console.log(`[VIITS] 📊 Estado ${hour}:${String(minute).padStart(2,'0')} — ${stationsWithData}/${ALL_STATIONS.length} peajes con datos | Fallos: ${consecutiveFailures} | Última conexión: ${minutesSinceSuccess}min`);
+    }
+  }, 60000);
+
+  // ── VISIBILITY CHANGE: re-poll al volver de background tab ──
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible') {
+      const minutesSinceSuccess = Math.round((Date.now() - lastSuccessfulPoll) / 60000);
+      if (minutesSinceSuccess > 2) {
+        console.log('[VIITS] 🔄 Tab activo — re-polling datos frescos...');
+        // Re-poll Waze inmediatamente (datos globales)
+        fetchWazeFeed().catch(() => {});
+        fetchWazeTvt().catch(() => {});
+        // Re-poll primer peaje para confirmar conectividad
+        pollOneStation(ALL_STATIONS[0]).catch(() => {});
+      }
+    }
+  });
 }
 
 /**

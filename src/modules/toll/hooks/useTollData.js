@@ -56,12 +56,12 @@ const SS_MULTIPLIER_RETORNO = 1.50; // Retorno más concentrado en pocas horas
 const SS_MULTIPLIER_EXODO = 1.65;   // Éxodo normal: flujo elevado
 const SS_MULTIPLIER_EXODO_PLENO = 1.85; // Éxodo pleno (Jueves Santo): máxima presión
 
-// IRT boost por hora para éxodo pleno — target 98% congestión en picos
+// IRT boost por hora para éxodo pleno — confirmado foto campo Chinauta 9:03 AM COLAPSO
+// Pico AM extendido 6-11AM (no solo 7-9), pico PM 13-18PM
 const EXODO_PLENO_IRT_BOOST = {
-  5: 1.05, 6: 1.15, 7: 1.35, 8: 1.35, 9: 1.20,
-  10: 1.05, 11: 1.0, 12: 1.0, 13: 1.15,
-  14: 1.35, 15: 1.35, 16: 1.20, 17: 1.05,
-  18: 1.0, 19: 1.0, 20: 1.0,
+  5: 1.15, 6: 1.40, 7: 1.60, 8: 1.60, 9: 1.55, 10: 1.45, 11: 1.35,
+  12: 1.20, 13: 1.35, 14: 1.55, 15: 1.60, 16: 1.55, 17: 1.40, 18: 1.25,
+  19: 1.10, 20: 1.0, 21: 1.0, 22: 1.0, 23: 1.0,
 };
 
 function getHourlyFactor() {

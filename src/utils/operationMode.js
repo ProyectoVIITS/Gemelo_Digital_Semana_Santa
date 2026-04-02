@@ -35,8 +35,8 @@ const OPERATION_CALENDAR = {
   '2026-03-31': { mode: 'exodo', label: 'OPERACIÓN ÉXODO · Martes Santo', level: 'alto' },
   '2026-04-01': { mode: 'exodo', label: 'OPERACIÓN ÉXODO · Miércoles Santo', level: 'alto', restriccionCarga: { start: 12, end: 23 } },
   '2026-04-02': { mode: 'exodo', label: 'OPERACIÓN ÉXODO · Jueves Santo — ÉXODO PLENO', level: 'pleno', restriccionCarga: { start: 6, end: 15 } },
-  '2026-04-03': { mode: 'exodo', label: 'OPERACIÓN ÉXODO · Viernes Santo', level: 'alto' },
-  '2026-04-04': { mode: 'retorno_progresivo', label: 'Operación Retorno · Sábado de Gloria', startHour: 12, restriccionCarga: { start: 14, end: 23 } },
+  '2026-04-03': { mode: 'exodo', label: 'OPERACIÓN ÉXODO · Viernes Santo', level: 'pleno' },
+  '2026-04-04': { mode: 'retorno_progresivo', label: 'Operación Retorno · Sábado de Gloria', startHour: 14, restriccionCarga: { start: 14, end: 23 } },
   '2026-04-05': { mode: 'retorno', label: 'Operación Retorno · Domingo de Resurrección', restriccionCarga: { start: 10, end: 23 } },
 };
 

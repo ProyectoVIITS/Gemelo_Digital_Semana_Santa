@@ -583,6 +583,9 @@ export default function TollCanvas({
     const _retScale = _opMode.retornoScale || 0;
     const _isNight = _hour >= 20 || _hour <= 5;
     const _isGridlock = _isRetorno && _retScale >= 0.75 && _hour >= 13 && _hour <= 20;
+    const _isPlenoFrame = _opMode.exodoLevel === 'pleno';
+    const _isPeakFrame = (_hour >= 6 && _hour <= 11) || (_hour >= 13 && _hour <= 18);
+    const _isPlenoColapso = _isPlenoFrame && _isPeakFrame; // COLAPSO TOTAL: forzar máximo
 
     // ── REAL TRAFFIC from Google Routes API ──
     // Si hay datos reales, overrideamos velocidades del canvas
@@ -594,7 +597,7 @@ export default function TollCanvas({
       : 1.0;
     // Override gridlock: si datos reales muestran congestión > 60%, forzar gridlock visual
     const _realGridlock = _hasRealTraffic && _rt.congestionRatio > 0.6;
-    const effectiveGridlock = _isGridlock || _realGridlock;
+    const effectiveGridlock = _isGridlock || _realGridlock || _isPlenoColapso;
 
     // ── Spawn vehicles — accumulator pattern (NEVER stops) ──
     const activeLanes = (currentLanes || []).filter(l => {
@@ -604,22 +607,25 @@ export default function TollCanvas({
     if (activeLanes.length > 0) {
       const rawFlow = (currentMetrics.vehiclesHour || 60) / 3600;
       const gridlockSalida = _isGridlock;
-      const _isExodoNow = _opMode.isExodo || false;
-      const _isPlenoNow = _opMode.exodoLevel === 'pleno';
-      const _isExodoPeak = _isExodoNow && ((_hour >= 6 && _hour <= 10) || (_hour >= 13 && _hour <= 18));
-      const _isPlenoPeak = _isPlenoNow && _isExodoPeak;
-      const minVisualFlow = gridlockSalida
-        ? (isMini ? 0.04 : 0.08)
-        : _isPlenoPeak
-        ? (isMini ? 1.0 : 3.5)   // ÉXODO PLENO: 3.5 veh/s → colapso total en 3-4s
-        : _isExodoPeak
-        ? (isMini ? 0.6 : 1.8)
-        : _isExodoNow
-        ? (isMini ? 0.3 : 0.8)
-        : _isNight
-        ? (isMini ? 0.06 : 0.12)
-        : (isMini ? 0.15 : 0.30);
-      const effectiveFlow = Math.max(gridlockSalida ? rawFlow * 0.15 : rawFlow, minVisualFlow);
+      // ── ÉXODO PLENO COLAPSO: forzar spawn masivo independiente del metrics ──
+      let effectiveFlow;
+      if (_isPlenoColapso) {
+        // COLAPSO TOTAL: ignorar metrics, forzar 4 veh/s hasta llenar MAX_VEHICLES
+        effectiveFlow = isMini ? 1.5 : 4.0;
+      } else {
+        const _isExodoNow = _opMode.isExodo || false;
+        const _isExodoPeak = _isExodoNow && ((_hour >= 6 && _hour <= 10) || (_hour >= 13 && _hour <= 18));
+        const minVisualFlow = gridlockSalida
+          ? (isMini ? 0.04 : 0.08)
+          : _isExodoPeak
+          ? (isMini ? 0.6 : 1.8)
+          : _isExodoNow
+          ? (isMini ? 0.3 : 0.8)
+          : _isNight
+          ? (isMini ? 0.06 : 0.12)
+          : (isMini ? 0.15 : 0.30);
+        effectiveFlow = Math.max(gridlockSalida ? rawFlow * 0.15 : rawFlow, minVisualFlow);
+      }
 
       // Accumulate fractional spawns to guarantee eventual spawn
       spawnAccRef.current += effectiveFlow * dt;
@@ -632,9 +638,15 @@ export default function TollCanvas({
         // ── Speed: use REAL traffic data if available ──
         const vehHour = currentMetrics.vehiclesHour || 100;
         const flowRatio = Math.min(vehHour / 600, 1);
-        let approachSpeedBase = 25 + flowRatio * 20;
-        let approachSpeedVar = 8 + flowRatio * 12;
-        // Override con datos reales de Google Routes
+        let approachSpeedBase, approachSpeedVar;
+        if (_isPlenoColapso) {
+          // COLAPSO: vehículos llegan lento (cola desde lejos), se acumulan
+          approachSpeedBase = 12 + flowRatio * 8;  // 12-20 px/s (antes 25-45)
+          approachSpeedVar = 4 + flowRatio * 4;
+        } else {
+          approachSpeedBase = 25 + flowRatio * 20;
+          approachSpeedVar = 8 + flowRatio * 12;
+        }
         if (_hasRealTraffic) {
           approachSpeedBase = approachSpeedBase * _realSpeedFactor;
           approachSpeedVar = approachSpeedVar * _realSpeedFactor;

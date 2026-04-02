@@ -137,6 +137,9 @@ async function fetchGoogle(stationId) {
 // 2. TOMTOM TRAFFIC FLOW — Velocidad por segmento
 // ═══════════════════════════════════════════════════════
 async function fetchTomTom(stationId) {
+  // TomTom desactivado temporalmente — free tier excedido (2,500 req/día)
+  // Google + Waze + HERE cubren la funcionalidad
+  return null;
   if (!TOMTOM_KEY) return null;
   const seg = TOLL_SEGMENTS[stationId];
   if (!seg || !seg.tt) return null;

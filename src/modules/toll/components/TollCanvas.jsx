@@ -584,15 +584,14 @@ export default function TollCanvas({
     const _retScale = _opMode.retornoScale || 0;
     const _isNight = _hour >= 20 || _hour <= 5;
     const _isGridlock = _isRetorno && _retScale >= 0.75 && _hour >= 13 && _hour <= 20;
+    // ── REAL TRAFFIC from Google Routes API ──
+    const _rt = realTraffic;
+    const _hasRealTraffic = !!(_rt && _rt.currentSpeed != null);
+
     const _isPlenoFrame = _opMode.exodoLevel === 'pleno';
     const _isPeakFrame = (_hour >= 6 && _hour <= 10) || (_hour >= 13 && _hour <= 18);
-    // Colapso solo cuando APIs reales confirman congestión alta (congestionRatio > 0.5)
+    // Colapso solo cuando APIs reales confirman congestión alta
     const _isPlenoColapso = _isPlenoFrame && _isPeakFrame && _hasRealTraffic && _rt.congestionRatio > 0.5;
-
-    // ── REAL TRAFFIC from Google Routes API ──
-    // Si hay datos reales, overrideamos velocidades del canvas
-    const _rt = realTraffic; // { currentSpeed (km/h), congestionRatio (0-1) }
-    const _hasRealTraffic = !!(_rt && _rt.currentSpeed != null);
     // Factor de velocidad real: si Google dice 6 km/h vs 45 libre = 0.13 → vehículos MUY lentos
     const _realSpeedFactor = _hasRealTraffic
       ? Math.max(0.05, _rt.currentSpeed / Math.max(_rt.freeFlowSpeed || 60, 1))

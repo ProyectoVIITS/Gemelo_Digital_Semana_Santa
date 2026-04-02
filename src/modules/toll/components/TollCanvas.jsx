@@ -590,8 +590,10 @@ export default function TollCanvas({
 
     const _isPlenoFrame = _opMode.exodoLevel === 'pleno';
     const _isPeakFrame = (_hour >= 6 && _hour <= 10) || (_hour >= 13 && _hour <= 18);
+    // Congestión real de las APIs (0 = fluido, 1 = parado)
+    const _realCongestion = _hasRealTraffic ? (_rt.congestionRatio || 0) : 0;
     // Colapso solo cuando APIs reales confirman congestión alta
-    const _isPlenoColapso = _isPlenoFrame && _isPeakFrame && _hasRealTraffic && _rt.congestionRatio > 0.5;
+    const _isPlenoColapso = _isPlenoFrame && _isPeakFrame && _realCongestion > 0.5;
     // Factor de velocidad real: si Google dice 6 km/h vs 45 libre = 0.13 → vehículos MUY lentos
     const _realSpeedFactor = _hasRealTraffic
       ? Math.max(0.05, _rt.currentSpeed / Math.max(_rt.freeFlowSpeed || 60, 1))
@@ -608,24 +610,24 @@ export default function TollCanvas({
     if (activeLanes.length > 0) {
       const rawFlow = (currentMetrics.vehiclesHour || 60) / 3600;
       const gridlockSalida = _isGridlock;
-      // ── ÉXODO PLENO COLAPSO: forzar spawn masivo independiente del metrics ──
+      // ── Spawn rate basado en datos reales ──
       let effectiveFlow;
       if (_isPlenoColapso) {
-        // COLAPSO TOTAL: ignorar metrics, forzar 4 veh/s hasta llenar MAX_VEHICLES
         effectiveFlow = isMini ? 1.5 : 4.0;
+      } else if (_realCongestion > 0.6) {
+        // APIs dicen congestión alta → spawn elevado
+        effectiveFlow = isMini ? 0.8 : 2.0;
+      } else if (_realCongestion > 0.3) {
+        // APIs dicen moderado
+        effectiveFlow = isMini ? 0.4 : 0.8;
       } else {
-        const _isExodoNow = _opMode.isExodo || false;
-        const _isExodoPeak = _isExodoNow && ((_hour >= 6 && _hour <= 10) || (_hour >= 13 && _hour <= 18));
+        // APIs dicen fluido o sin datos → flujo normal suave
         const minVisualFlow = gridlockSalida
           ? (isMini ? 0.04 : 0.08)
-          : _isExodoPeak
-          ? (isMini ? 0.6 : 1.8)
-          : _isExodoNow
-          ? (isMini ? 0.3 : 0.8)
           : _isNight
-          ? (isMini ? 0.06 : 0.12)
-          : (isMini ? 0.15 : 0.30);
-        effectiveFlow = Math.max(gridlockSalida ? rawFlow * 0.15 : rawFlow, minVisualFlow);
+          ? (isMini ? 0.06 : 0.10)
+          : (isMini ? 0.12 : 0.25);
+        effectiveFlow = Math.max(rawFlow, minVisualFlow);
       }
 
       // Accumulate fractional spawns to guarantee eventual spawn
@@ -641,11 +643,14 @@ export default function TollCanvas({
         const flowRatio = Math.min(vehHour / 600, 1);
         let approachSpeedBase, approachSpeedVar;
         if (_isPlenoColapso) {
-          // COLAPSO: vehículos llegan lento (cola desde lejos), se acumulan
-          approachSpeedBase = 12 + flowRatio * 8;  // 12-20 px/s (antes 25-45)
+          approachSpeedBase = 12 + flowRatio * 8;
           approachSpeedVar = 4 + flowRatio * 4;
+        } else if (_realCongestion > 0.6) {
+          approachSpeedBase = 18 + flowRatio * 10;
+          approachSpeedVar = 5 + flowRatio * 5;
         } else {
-          approachSpeedBase = 25 + flowRatio * 20;
+          // Fluido: approach a velocidad normal
+          approachSpeedBase = 30 + flowRatio * 25;
           approachSpeedVar = 8 + flowRatio * 12;
         }
         if (_hasRealTraffic) {
@@ -972,28 +977,24 @@ export default function TollCanvas({
             // Éxodo pico: 6-12s efectivo, 2-4s FacilPass (pago lento → cola se forma)
             // Normal pico: 2-4s efectivo, 0.8-1.5s FacilPass
             // Valle: 0.5-1s
-            const _isExodoAtBooth = _opMode.isExodo || false;
-            const _isPlenoAtBooth = _opMode.exodoLevel === 'pleno';
-            const _isExodoPeakAtBooth = _isExodoAtBooth && ((_hour >= 6 && _hour <= 10) || (_hour >= 13 && _hour <= 18));
+            // Booth wait basado en congestión REAL de las APIs
             let baseWait;
-            if (_isPlenoAtBooth && _isExodoPeakAtBooth) {
-              // COLAPSO TOTAL: espera 10-18s efectivo, 3-6s FacilPass
+            if (_isPlenoColapso) {
               baseWait = lane?.type === 'FacilPass' ? 3 + Math.random() * 3 : 10 + Math.random() * 8;
-            } else if (_isExodoPeakAtBooth) {
-              baseWait = lane?.type === 'FacilPass' ? 2 + Math.random() * 2 : 6 + Math.random() * 6;
-            } else if (isPeakHour) {
-              baseWait = lane?.type === 'FacilPass' ? 0.8 + Math.random() * 0.7 : 2 + Math.random() * 2;
+            } else if (_realCongestion > 0.6) {
+              baseWait = lane?.type === 'FacilPass' ? 1.5 + Math.random() * 1.5 : 4 + Math.random() * 4;
+            } else if (_realCongestion > 0.3) {
+              baseWait = lane?.type === 'FacilPass' ? 0.8 + Math.random() * 0.7 : 2 + Math.random() * 1.5;
             } else {
-              baseWait = lane?.type === 'FacilPass' ? 0.4 + Math.random() * 0.4 : 0.8 + Math.random() * 0.6;
+              // Fluido: paso rápido por caseta
+              baseWait = lane?.type === 'FacilPass' ? 0.3 + Math.random() * 0.3 : 0.6 + Math.random() * 0.5;
             }
             v.waitTimer = baseWait;
           } else {
             // ── Smooth deceleration curve approaching booth ──
-            const _isExodoAppr = _opMode.isExodo || false;
-            const _isPlenoAppr = _opMode.exodoLevel === 'pleno';
-            // PLENO: frena desde 400px, factor mínimo 0.06 (casi detenido)
-            const brakeDistance = (_isPlenoAppr && _isPeakNow) ? 400 : (_isExodoAppr && _isPeakNow) ? 250 : 150;
-            const minApproachFactor = (_isPlenoAppr && _isPeakNow) ? 0.06 : (_isExodoAppr && _isPeakNow) ? 0.12 : 0.25;
+            // Distancia de frenado basada en congestión real
+            const brakeDistance = _isPlenoColapso ? 400 : _realCongestion > 0.6 ? 250 : 150;
+            const minApproachFactor = _isPlenoColapso ? 0.06 : _realCongestion > 0.6 ? 0.12 : 0.25;
             const approachFactor = distToBooth < brakeDistance ? minApproachFactor + (1 - minApproachFactor) * (distToBooth / brakeDistance) : 1;
             v.x += v.speed * approachFactor * dt;
           }
@@ -1021,23 +1022,27 @@ export default function TollCanvas({
           v.waitTimer -= dt;
           if (v.waitTimer <= 0) {
             v.state = 'departing';
-            // Velocidad de salida de caseta
-            const _isExodoDep = _opMode.isExodo || false;
-            const _isPlenoDep = _opMode.exodoLevel === 'pleno';
-            const _isExodoPeakDep = _isExodoDep && ((_hour >= 6 && _hour <= 10) || (_hour >= 13 && _hour <= 18));
-            // PLENO: 8 px/s = casi detenido post-caseta (represamiento)
-            v.speed = (_isPlenoDep && _isExodoPeakDep) ? 8 : _isExodoPeakDep ? 15 : (isPeakHour ? 20 : 30);
+            // Velocidad salida caseta basada en congestión real
+            if (_isPlenoColapso) {
+              v.speed = 8;  // Represamiento
+            } else if (_realCongestion > 0.6) {
+              v.speed = 15;
+            } else if (_realCongestion > 0.3) {
+              v.speed = 25;
+            } else {
+              v.speed = 40; // Fluido: salida rápida
+            }
           }
           break;
         case 'departing': {
           const postBoothDist = v.x - gantryX;
-          const _isPlenoDepart = _opMode.exodoLevel === 'pleno' && _isPeakNow;
-          const _hasRepresamiento = _isGridlock || _isPlenoDepart;
+          // Represamiento solo cuando APIs confirman congestión real
+          const _hasRepresamiento = _isGridlock || _isPlenoColapso || (_realCongestion > 0.6);
 
           if (_hasRepresamiento && postBoothDist > 10 && !v.isCounter) {
             // ── REPRESAMIENTO POST-PEAJE ──
             // Éxodo pleno: cola de 200+ metros después de la caseta (foto Chinauta)
-            const stopZone = _isPlenoDepart
+            const stopZone = _isPlenoColapso
               ? gantryX + 200 + (v.lane % 4) * 40  // Pleno: cola más larga, escalonar 4 carriles
               : gantryX + 120 + (v.lane % 3) * 30;
 
@@ -1056,13 +1061,13 @@ export default function TollCanvas({
             } else {
               const distToStop = stopZone - v.x;
               const brakeFactor = Math.min(distToStop / 80, 1);
-              const maxSpeed = _isPlenoDepart ? 5 + brakeFactor * 6 : 8 + brakeFactor * 12;
+              const maxSpeed = _isPlenoColapso ? 5 + brakeFactor * 6 : 8 + brakeFactor * 12;
               v.speed = Math.min(v.speed + 3 * dt, maxSpeed);
               v.x += v.speed * dt;
             }
           } else {
-            const maxDepart = _isPlenoDepart ? 25 : 70;
-            const accel = _isPlenoDepart ? 15 : 45;
+            const maxDepart = _isPlenoColapso ? 25 : 70;
+            const accel = _isPlenoColapso ? 15 : 45;
             v.speed = Math.min(v.speed + accel * dt, maxDepart);
             v.x += v.speed * dt;
           }

@@ -135,14 +135,17 @@ function buildSnapshot(irt, stationId, realTraffic = null) {
 
   // ── OVERRIDE CON DATOS REALES (Google Routes API) ──
   // Si hay tráfico real, usamos esa velocidad directamente
+  // ── Velocidad: dato REAL de API cuando disponible ──
   let speed;
   if (realTraffic && realTraffic.currentSpeed != null) {
-    // Velocidad real de Google Routes → ajustar a zona de peaje (peaje ≈ 40% de velocidad vía)
-    speed = clamp(Math.round(realTraffic.currentSpeed * 0.4 + rnd(3)), 3, 45);
+    // Velocidad directa de Google/TomTom/Waze — SIN reducción
+    // Es la velocidad real del segmento vial, no una estimación
+    speed = clamp(Math.round(realTraffic.currentSpeed + rnd(2)), 5, 120);
   } else {
+    // Sin datos reales: estimar por hora y IRT
     const baseSpeed = isValley
-      ? clamp(Math.round(35 - irt * 0.1 + rnd(5)), 20, 40)
-      : clamp(Math.round(30 - irt * 0.15 - peakSpeedReduction + rnd(5)), 10, 35);
+      ? clamp(Math.round(60 - irt * 0.2 + rnd(5)), 30, 80)
+      : clamp(Math.round(50 - irt * 0.25 - peakSpeedReduction + rnd(5)), 15, 70);
     speed = baseSpeed;
   }
 
@@ -165,10 +168,8 @@ function buildSnapshot(irt, stationId, realTraffic = null) {
 
   let occup;
   if (realTraffic && realTraffic.congestionRatio != null) {
+    // Ocupación directa de APIs: congestionRatio 0→10%, 0.5→55%, 1.0→98%
     occup = clamp(Math.round(10 + realTraffic.congestionRatio * 88 + rnd(2)), 5, 98);
-  } else if (isExodoPleno && isPeakNow && irt > 60) {
-    // ÉXODO PLENO + pico: target 98% congestión en casetas de salida
-    occup = clamp(Math.round(88 + (irt - 60) * 0.8 + rnd(2)), 88, 98);
   } else if (isRetorno && irt > 85) {
     occup = clamp(Math.round(88 + (irt - 85) * 0.8 + rnd(2)), 88, 98);
   } else if (isRetorno && irt > 65) {
@@ -310,28 +311,24 @@ function buildSnapshot(irt, stationId, realTraffic = null) {
       laneSpeed = 0;
       laneQueue = 0;
     } else if (isRetLane) {
-      // Carriles RETORNO: velocidades y colas basadas en congestión real
-      // Gridlock (IRT>90): 3-8 km/h, colas 8-15 veh — tráfico estancado
-      // Pico alto (IRT>75): 8-15 km/h, colas 5-10 veh
-      // Normal: 15-30 km/h, colas moderadas
-      const isGridlockNow = irt > 90;
-      const isHighCongestion = irt > 75;
+      // Carriles RETORNO: velocidad basada en dato real, colas proporcionales a congestión
+      const realCong = realTraffic?.congestionRatio || 0;
       let retBaseSpeed;
-      if (isGridlockNow) {
-        retBaseSpeed = clamp(Math.round(3 + laneVariation + (isFacilPass ? 3 : 0)), 2, 8);
-      } else if (isHighCongestion) {
-        retBaseSpeed = clamp(Math.round(8 + laneVariation + (isFacilPass ? 5 : 0)), 5, 18);
+      if (realCong > 0.8) {
+        retBaseSpeed = clamp(Math.round(5 + laneVariation), 3, 10);
+      } else if (realCong > 0.5) {
+        retBaseSpeed = clamp(Math.round(speed * 0.6 + laneVariation), 8, 25);
       } else {
-        retBaseSpeed = clamp(Math.round(speed * 0.7 + (isFacilPass ? 8 : -2) + laneVariation), 10, 40);
+        retBaseSpeed = clamp(Math.round(speed * 0.85 + (isFacilPass ? 5 : -2) + laneVariation), 15, 60);
       }
-      const queueMultiplier = isGridlockNow ? 1.8 : isHighCongestion ? 1.4 : 1.0;
-      const retQueue = clamp(Math.round(((irt - 15) / (6 + i) + 2) * queueFactor * queueMultiplier), 0, 18);
+      const retQueue = clamp(Math.round(realCong * 12 * queueFactor + laneVariation * 0.5), 0, 18);
       laneSpeed = retBaseSpeed;
       laneQueue = retQueue;
     } else {
-      // Carriles SALIDA: velocidad normal de peaje
-      laneSpeed = clamp(Math.round(speed + (isFacilPass ? 10 : -3) + laneVariation), 15, 50);
-      laneQueue = clamp(Math.round(((irt - 28) / (10 + i)) * queueFactor), 0, 8);
+      // Carriles SALIDA: velocidad directa de API + variación por carril
+      const realCong = realTraffic?.congestionRatio || 0;
+      laneSpeed = clamp(Math.round(speed + (isFacilPass ? 8 : -2) + laneVariation), 10, 80);
+      laneQueue = clamp(Math.round(realCong * 8 * queueFactor + laneVariation * 0.3), 0, 10);
     }
 
     lanes.push({
@@ -358,11 +355,14 @@ function buildSnapshot(irt, stationId, realTraffic = null) {
   };
 
   const now = new Date();
+  // Speed history basada en velocidad real actual como referencia
   const speedHistory = Array.from({ length: 24 }, (_, i) => {
     const t = new Date(now.getTime() - (23 - i) * 5 * 60 * 1000);
     const pastHour = t.getHours();
     const hf = flowProfile[pastHour] || 0.5;
-    const s = clamp(Math.round(95 - hf * 40 - irt * 0.3 + rnd(8)), 20, 110);
+    // Usar velocidad real como base, variar por perfil horario
+    const baseHistSpeed = speed || 40;
+    const s = clamp(Math.round(baseHistSpeed * (0.8 + (1 - hf) * 0.4) + rnd(5)), 10, 110);
     return {
       time: t.toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit', hour12: false, timeZone: 'America/Bogota' }),
       avgSpeed: s,
@@ -374,8 +374,9 @@ function buildSnapshot(irt, stationId, realTraffic = null) {
   return { lanes, metrics, speedHistory, alerts: [] };
 }
 
-function updateHistory(prev, irt) {
-  const speed = clamp(Math.round(85 - irt * 0.62 + rnd(10)), 15, 110);
+function updateHistory(prev, irt, realSpeed) {
+  // Usar velocidad real si disponible, sino estimar
+  const speed = realSpeed || clamp(Math.round(70 - irt * 0.35 + rnd(8)), 15, 110);
   const now = new Date();
   const point = {
     time: now.toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit', hour12: false, timeZone: 'America/Bogota' }),
@@ -440,7 +441,7 @@ export default function useTollData(stationId, corridorId, realTraffic = null) {
         const snapshot = buildSnapshot(irt, stationId, realTraffic);
         return {
           ...snapshot,
-          speedHistory: updateHistory(prev.speedHistory, irt),
+          speedHistory: updateHistory(prev.speedHistory, irt, realTraffic?.currentSpeed),
           alerts: [...newAlerts, ...prev.alerts].slice(0, 8),
         };
       });

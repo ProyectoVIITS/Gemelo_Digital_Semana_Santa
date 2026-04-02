@@ -44,28 +44,12 @@
           errorCount++;
           console.error('[VIITS WATCHDOG] Error #' + errorCount + ':', e.message);
           if (errorCount >= MAX_ERRORS) {
-            console.warn('[VIITS WATCHDOG] Too many errors, refreshing in 5s...');
-            setTimeout(function() { window.location.reload(); }, REFRESH_DELAY);
+            console.warn('[VIITS WATCHDOG] Too many errors detected — logging only (no refresh)');
           }
         });
 
-        // If React root becomes empty (crash), auto-refresh
-        setInterval(function() {
-          var root = document.getElementById('root');
-          if (root && root.children.length === 0 && document.readyState === 'complete') {
-            console.warn('[VIITS WATCHDOG] Root empty — React crashed. Refreshing...');
-            setTimeout(function() { window.location.reload(); }, REFRESH_DELAY);
-          }
-        }, 10000);
-
-        // Health check: if server goes down, retry until it comes back
-        setInterval(function() {
-          fetch('/health', { method: 'GET', cache: 'no-store' })
-            .catch(function() {
-              console.warn('[VIITS WATCHDOG] Server unreachable, retrying in 10s...');
-              setTimeout(function() { window.location.reload(); }, 10000);
-            });
-        }, 30000);
+        // Root empty check disabled — was causing infinite refresh loops
+        // Health check disabled — not needed for Vercel static hosting
       })();
     </script>
   </body>

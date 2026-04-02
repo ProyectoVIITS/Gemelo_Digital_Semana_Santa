@@ -176,9 +176,9 @@ export default function TollCanvas({
   const _isNight = _colHour >= 20 || _colHour <= 5;
   const _opModeInit = getOperationMode();
   const _isExodo = _opModeInit.isExodo || false;
+  const _isPleno = _opModeInit.exodoLevel === 'pleno';
   // Éxodo pleno: todo el día es pico (6AM-8PM sin huecos)
   const _isPeakNow = _isPleno ? (_colHour >= 6 && _colHour <= 20) : ((_colHour >= 6 && _colHour <= 10) || (_colHour >= 13 && _colHour <= 18));
-  const _isPleno = _opModeInit.exodoLevel === 'pleno';
   const MAX_VEHICLES = _isNight
     ? (mode === 'mini' ? 8 : 15)
     : (_isPleno && _isPeakNow)

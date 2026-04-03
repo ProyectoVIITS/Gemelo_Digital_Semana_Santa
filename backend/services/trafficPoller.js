@@ -144,8 +144,8 @@ function getWazeJamsForStation(allJams, stationId) {
   const seg = TOLL_SEGMENTS[stationId];
   if (!seg) return null;
   const nearby = allJams.filter(j => {
-    if (j.line && j.line.length > 0) return j.line.some(pt => haversine(seg.tt.lat, seg.tt.lng, pt.y, pt.x) < 15);
-    if (j.bbox) return haversine(seg.tt.lat, seg.tt.lng, (j.bbox.minY + j.bbox.maxY) / 2, (j.bbox.minX + j.bbox.maxX) / 2) < 15;
+    if (j.line && j.line.length > 0) return j.line.some(pt => haversine(seg.tt.lat, seg.tt.lng, pt.y, pt.x) < 8);
+    if (j.bbox) return haversine(seg.tt.lat, seg.tt.lng, (j.bbox.minY + j.bbox.maxY) / 2, (j.bbox.minX + j.bbox.maxX) / 2) < 8;
     return false;
   });
   if (nearby.length === 0) return null;

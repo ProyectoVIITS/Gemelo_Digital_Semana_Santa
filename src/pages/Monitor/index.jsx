@@ -218,6 +218,7 @@ function MapBoundsController({ corridors }) {
 }
 
 function ColombiaMapPanel({ corridorData, onSelectCorridor, onSelectToll, showAccidentLayer, accidentHotspots }) {
+  const wazeJams = useTrafficStore(state => state.nationalWazeJams) || [];
   useEffect(() => { injectPulseCSS(); }, []);
 
   /* Memo: corridor polyline paths */
@@ -426,7 +427,63 @@ function ColombiaMapPanel({ corridorData, onSelectCorridor, onSelectToll, showAc
             );
           })}
 
-        </MapContainer>
+          </MapContainer>
+        </div>
+
+        {/* ── Waze Jam markers ── */}
+        {wazeJams.map(jam => {
+          const jamCenter = jam.line?.[Math.floor((jam.line?.length || 0) / 2)];
+          if (!jamCenter) return null;
+          const isSevere = jam.jamLevel >= 4;
+          const levelColor = isSevere ? '#ef4444' : '#f59e0b';
+          
+          return (
+            <React.Fragment key={jam.uuid || jam.id}>
+              {/* Outer pulsing ring */}
+              <div className={`viits-toll-pulse ${isSevere ? 'critical' : ''}`} style={{
+                left: '50%', top: '50%', width: 0, height: 0 /* Leaflet can't overlay HTML easily inside SVG here without Marker, so we use CircleMarker glow */
+              }} />
+              <CircleMarker
+                center={[jamCenter.y, jamCenter.x]}
+                radius={isSevere ? 11 : 7}
+                pathOptions={{
+                  color: levelColor,
+                  fillColor: levelColor,
+                  fillOpacity: 0.15,
+                  weight: 1,
+                  opacity: 0.5,
+                  dashArray: '2 4'
+                }}
+              />
+              <CircleMarker
+                center={[jamCenter.y, jamCenter.x]}
+                radius={isSevere ? 4 : 3}
+                pathOptions={{
+                  color: '#fff',
+                  fillColor: levelColor,
+                  fillOpacity: 1,
+                  weight: 1.5,
+                  opacity: 1,
+                }}
+              >
+                <LTooltip direction="top" offset={[0, -8]} className="viits-toll-label">
+                  <div>
+                    <div style={{ color: levelColor, fontWeight: 'bold', fontSize: 11, marginBottom: 2 }}>
+                      {(jam.name || 'CONGESTIÓN EN TRAMO DE VÍA').toUpperCase()}
+                      {jam.leadAlert?.type === 'ACCIDENT' && ' ⚠'}
+                    </div>
+                    <div style={{ display: 'flex', gap: 6, fontSize: 9 }}>
+                      <span style={{ color: '#f59e0b' }}>Nivel {jam.jamLevel}</span>
+                      <span style={{ color: '#ef4444' }}>{Math.round(jam.time/60)} min</span>
+                      <span style={{ color: '#38bdf8' }}>{(jam.length/1000).toFixed(1)} km</span>
+                    </div>
+                  </div>
+                </LTooltip>
+              </CircleMarker>
+            </React.Fragment>
+          );
+        })}
+
       </div>
 
       {/* ── Corridor legend ── */}
@@ -737,27 +794,7 @@ function AlertaDITRA({ corridorData }) {
             const isSevere = jam.jamLevel >= 4 || ratioValue >= 4;
             const levelColor = jam.jamLevel >= 4 ? '#ef4444' : '#f59e0b';
             
-            // Match con peajes VIITS
-            const jamCenter = jam.line?.[Math.floor((jam.line?.length || 0) / 2)];
-            let matchedToll = null;
-            let matchedCorridor = null;
-            if (jamCenter) {
-              const R = 6371;
-              let minDist = 15; 
-              NEXUS_CORRIDORS.forEach(c => {
-                c.tollStations.forEach(t => {
-                  const dLat = (t.lat - jamCenter.y) * Math.PI / 180;
-                  const dLng = (t.lng - jamCenter.x) * Math.PI / 180;
-                  const a = Math.sin(dLat/2)**2 + Math.cos(jamCenter.y*Math.PI/180)*Math.cos(t.lat*Math.PI/180)*Math.sin(dLng/2)**2;
-                  const d = R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
-                  if (d < minDist) { minDist = d; matchedToll = t; matchedCorridor = c; }
-                });
-              });
-            }
-
-            const linkUrl = matchedToll
-              ? `/monitor/${matchedCorridor.id}/${matchedToll.id.toLowerCase()}`
-              : `/monitor/waze/${jam.uuid || jam.id || i}`;
+            const linkUrl = `/monitor/waze/${jam.uuid || jam.id || i}`;
 
             // Calculando UI de barra
             const ratioPct = Math.min(100, Math.max(0, (ratioValue / 10) * 100)); // 10x is 100%
@@ -788,22 +825,11 @@ function AlertaDITRA({ corridorData }) {
                     {hasAccident && <span className="ml-1.5 px-1.5 py-0.5 rounded-sm bg-red-500/20 text-red-400 text-[8px] uppercase tracking-widest border border-red-500/30 font-bold">⚠ ACCIDENTE</span>}
                     {isClosed && <span className="ml-1.5 px-1.5 py-0.5 rounded-sm bg-red-900/40 text-red-500 text-[8px] uppercase tracking-widest border border-red-500/30 font-bold">🚫 CERRADO</span>}
                   </div>
-                  <div className="flex items-center mt-1">
-                    {matchedToll ? (
-                      <div className="flex items-center gap-1.5">
-                        <span className="px-1 py-0.5 rounded text-[8px] font-mono font-bold" style={{
-                          backgroundColor: `${matchedCorridor.color}20`, color: matchedCorridor.color, border: `1px solid ${matchedCorridor.color}40`
-                        }}>{matchedCorridor.id}</span>
-                        <span className="text-[9px] text-cyan-400/80">→ {matchedToll.name}</span>
-                      </div>
-                    ) : (
-                      <div className="flex items-center gap-1.5">
-                        <span className="px-1 py-0.5 rounded text-[8px] font-mono font-bold border border-purple-500/30" style={{
-                           background: 'linear-gradient(45deg, rgba(168,85,247,0.2), rgba(168,85,247,0.05))', color: '#c084fc'
-                        }}>WAZE</span>
-                        <span className="text-[9px] text-purple-300">Simulador Global →</span>
-                      </div>
-                    )}
+                  <div className="flex items-center mt-1 flex-wrap gap-1.5">
+                    <span className="px-1 py-0.5 rounded text-[8px] font-mono font-bold border border-purple-500/30" style={{
+                       background: 'linear-gradient(45deg, rgba(168,85,247,0.2), rgba(168,85,247,0.05))', color: '#c084fc'
+                    }}>WAZE LIVE</span>
+                    <span className="text-[9px] text-slate-400">Punto Geográfico Exacto DITRA</span>
                   </div>
                 </div>
 

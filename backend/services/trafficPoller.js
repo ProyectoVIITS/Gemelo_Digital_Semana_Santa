@@ -144,8 +144,8 @@ function getWazeJamsForStation(allJams, stationId) {
   const seg = TOLL_SEGMENTS[stationId];
   if (!seg) return null;
   const nearby = allJams.filter(j => {
-    if (j.line && j.line.length > 0) return j.line.some(pt => haversine(seg.tt.lat, seg.tt.lng, pt.y, pt.x) < 8);
-    if (j.bbox) return haversine(seg.tt.lat, seg.tt.lng, (j.bbox.minY + j.bbox.maxY) / 2, (j.bbox.minX + j.bbox.maxX) / 2) < 8;
+    if (j.line && j.line.length > 0) return j.line.some(pt => haversine(seg.tt.lat, seg.tt.lng, pt.y, pt.x) < 15);
+    if (j.bbox) return haversine(seg.tt.lat, seg.tt.lng, (j.bbox.minY + j.bbox.maxY) / 2, (j.bbox.minX + j.bbox.maxX) / 2) < 15;
     return false;
   });
   if (nearby.length === 0) return null;
@@ -178,8 +178,9 @@ function fuseTrafficData(google, tomtom, here, wazeFeed, wazeTvt) {
   const hasRoadClosure = here?.hasRoadClosure || tomtom?.roadClosure || false;
 
   if (wazeFeed?.hasAccident && congestionRatio !== null) congestionRatio = Math.min(1, congestionRatio + 0.10);
-  if (wazeTvt && wazeTvt.maxJamLevel >= 4 && congestionRatio !== null) congestionRatio = Math.max(congestionRatio, 0.85);
-  if (hasRoadClosure && congestionRatio !== null) { congestionRatio = Math.max(congestionRatio, 0.95); currentSpeed = Math.min(currentSpeed || 5, 5); }
+  if (wazeTvt && wazeTvt.maxJamLevel >= 4) congestionRatio = Math.max(congestionRatio || 0, 0.85);
+  if (wazeTvt && wazeTvt.maxJamLevel >= 3) congestionRatio = Math.max(congestionRatio || 0, 0.65);
+  if (hasRoadClosure) { congestionRatio = Math.max(congestionRatio || 0, 0.95); currentSpeed = Math.min(currentSpeed || 5, 5); }
 
   const sources = [];
   if (google) sources.push('Google');

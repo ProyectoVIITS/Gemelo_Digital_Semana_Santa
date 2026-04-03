@@ -13,6 +13,7 @@
 const express = require('express');
 const path = require('path');
 const os = require('os');
+const { initWebSocketServer } = require('./backend/websocketServer');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -66,6 +67,9 @@ const server = app.listen(PORT, '0.0.0.0', () => {
   console.log(`[VIITS NEXUS] Health check: http://localhost:${PORT}/health`);
   console.log(`[VIITS NEXUS] Colombia time: ${new Date().toLocaleString('es-CO', { timeZone: 'America/Bogota' })}`);
 });
+
+// Init WS
+initWebSocketServer(server);
 
 // ── Graceful shutdown ──
 process.on('SIGTERM', () => {

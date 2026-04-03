@@ -5,21 +5,23 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { ArrowLeft, Shield, Wifi, AlertTriangle, Activity, Radio, TrendingDown, Clock } from 'lucide-react';
-import { AreaChart, Area, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, ReferenceLine, Cell } from 'recharts';
-import TollCanvas from '../toll/components/TollCanvas';
+import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
+import { MapContainer, TileLayer, Polyline, ZoomControl } from 'react-leaflet';
+import 'leaflet/dist/leaflet.css';
 import useWazeSegmentData from './useWazeSegmentData';
 import { getIRTLevel } from '../../data/nexusCorridors';
 import { getColombiaHour } from '../../utils/operationMode';
 import CongestionForecast from '../../components/shared/CongestionForecast';
+import { useTrafficStore } from '../../store/trafficStore';
+import RoadCanvas from './components/RoadCanvas';
 
 const CARD = { backgroundColor: 'rgba(13, 26, 46, 0.6)', borderColor: '#1a2d4a' };
 
 export default function WazeSegmentPage() {
   const { wazeId } = useParams();
+  const allJams = useTrafficStore(state => state.nationalWazeJams) || [];
   const [jam, setJam] = useState(null);
-  const [allJams, setAllJams] = useState([]);
   const [clock, setClock] = useState(new Date());
-  const [loading, setLoading] = useState(true);
 
   // Clock tick
   useEffect(() => {
@@ -27,38 +29,20 @@ export default function WazeSegmentPage() {
     return () => clearInterval(t);
   }, []);
 
-  // Fetch Waze TVT y encontrar el jam por ID
+  // Encontrar el jam por ID de Waze (id o uuid)
   useEffect(() => {
-    async function fetchJam() {
-      try {
-        const IS_PROD = window.location.hostname !== 'localhost';
-        const url = IS_PROD ? '/api/waze-tvt' : 'https://www.waze.com/row-partnerhub-api/feeds-tvt/?id=1761151881648';
-        const res = await fetch(url);
-        if (!res.ok) return;
-        const json = await res.json();
-        const jams = (json.irregularities || []).filter(j => j.jamLevel >= 2);
-        setAllJams(jams);
-
-        const found = jams.find(j => String(j.id) === String(wazeId));
-        setJam(found || jams[0] || null);
-        setLoading(false);
-      } catch (e) {
-        setLoading(false);
-      }
-    }
-    fetchJam();
-    const id = setInterval(fetchJam, 180000); // refresh cada 3 min
-    return () => clearInterval(id);
-  }, [wazeId]);
+    const found = allJams.find(j => String(j.uuid) === String(wazeId) || String(j.id) === String(wazeId));
+    setJam(found || null);
+  }, [allJams, wazeId]);
 
   const data = useWazeSegmentData(jam);
 
-  if (loading) {
+  if (!jam && allJams.length === 0) {
     return (
       <div className="min-h-screen bg-viits-bg flex items-center justify-center">
         <div className="text-center">
           <Radio className="w-8 h-8 text-purple-400 animate-pulse mx-auto mb-3" />
-          <div className="text-sm text-slate-400 font-mono">Conectando con Waze...</div>
+          <div className="text-sm text-slate-400 font-mono">Sincronizando con Waze Global...</div>
         </div>
       </div>
     );
@@ -167,16 +151,46 @@ export default function WazeSegmentPage() {
               </div>
             </div>
 
-            {/* Google Maps */}
-            <div className="rounded-lg border overflow-hidden" style={CARD}>
-              <iframe
-                title="Waze Segment Map"
-                width="100%"
-                height="280"
-                style={{ border: 0 }}
-                loading="lazy"
-                src={`https://www.google.com/maps/embed/v1/view?key=AIzaSyBFw0Qbyq9zTFTd-tUY6dZWTgaQzuU17R8&center=${mapLat},${mapLng}&zoom=13&maptype=roadmap`}
-              />
+            {/* Mapa Interactivo Oscuro (Leaflet) */}
+            <div className="rounded-lg border overflow-hidden relative" style={{ ...CARD, height: 320 }}>
+              <div className="absolute top-2 right-2 z-50 px-2 py-1 bg-black/60 rounded border border-purple-500/30 text-[9px] text-purple-300 font-mono flex items-center md:hidden">
+                <Radio className="w-3 h-3 mr-1" /> Satélite Radar Waze
+              </div>
+              <MapContainer 
+                center={[mapLat, mapLng]} 
+                zoom={14} 
+                className="w-full h-full"
+                zoomControl={false}
+              >
+                <TileLayer
+                  url="https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png"
+                  attribution='&copy; <a href="https://carto.com/">CARTO</a>'
+                />
+                <ZoomControl position="bottomright" />
+                {jam.line && jam.line.length > 0 && (
+                  <Polyline 
+                    positions={jam.line.map(pt => [pt.y, pt.x])}
+                    pathOptions={{ 
+                      color: level.color, 
+                      weight: jam.jamLevel >= 4 ? 6 : 4,
+                      opacity: 0.8,
+                      lineCap: 'round',
+                      lineJoin: 'round',
+                      dashArray: jam.jamLevel >= 4 ? '1, 8' : 'none',
+                    }}
+                  />
+                )}
+                {jam.line && jam.line.length > 0 && (
+                  <Polyline 
+                    positions={jam.line.map(pt => [pt.y, pt.x])}
+                    pathOptions={{ 
+                      color: '#ffffff', 
+                      weight: 1,
+                      opacity: 0.5
+                    }}
+                  />
+                )}
+              </MapContainer>
             </div>
 
             {/* Speed History Chart */}
@@ -212,25 +226,22 @@ export default function WazeSegmentPage() {
 
           {/* Right: TollCanvas + Lanes + Alerts */}
           <div className="col-span-12 xl:col-span-7 space-y-3">
-            {/* TollCanvas — Simulación visual del tramo */}
-            <div className="rounded-lg border overflow-hidden" style={CARD}>
-              <div className="flex items-center justify-between px-3 py-2 border-b" style={{ borderColor: '#1a2d4a' }}>
+            {/* RoadCanvas — Digital Twin de congestión continua */}
+            <div className="rounded-lg border overflow-hidden" style={{ ...CARD, position: 'relative' }}>
+              <div className="flex items-center justify-between px-3 py-2 border-b" style={{ borderColor: '#1a2d4a', backgroundColor: '#06111e' }}>
                 <div className="flex items-center gap-2">
-                  <span className="text-[10px] uppercase tracking-wider text-slate-500">Simulación del Tramo</span>
-                  <span className="px-1.5 py-0.5 rounded text-[8px] font-mono bg-purple-500/15 text-purple-400">DATOS WAZE</span>
+                  <span className="text-[10px] uppercase tracking-wider text-slate-500">Módulo Flujo Denso</span>
+                  <span className="px-1.5 py-0.5 rounded text-[8px] font-mono bg-purple-500/15 text-purple-400">TVT WAZE REALTIME</span>
                 </div>
-                <span className="text-[10px] font-mono text-slate-600">{data.lanes.length} carriles simulados</span>
+                <span className="text-[10px] font-mono text-slate-600">Simulador</span>
               </div>
-              <TollCanvas
-                mode="full"
-                stationName={jam.name || 'Tramo Waze'}
-                corridorColor="#a855f7"
-                lanes={data.lanes}
-                metrics={data.metrics}
-                showHeader={false}
-                showMetrics={false}
-                direction="salida"
-              />
+              <div style={{ height: 260, width: '100%', position: 'relative' }}>
+                 <RoadCanvas 
+                   jamLevel={jam.jamLevel || 3} 
+                   jamSpeed={data.metrics.avgSpeed || 5} 
+                   jamRatio={ratio === '?' ? 1 : parseFloat(ratio)} 
+                 />
+              </div>
             </div>
 
             {/* Lane Status */}

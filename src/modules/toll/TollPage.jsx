@@ -13,6 +13,8 @@ import LoadingScreen from '../../components/shared/LoadingScreen';
 import { getOperationMode } from '../../utils/operationMode';
 import { useGlobalTraffic } from '../../hooks/useTrafficAPI';
 import CongestionForecast from '../../components/shared/CongestionForecast';
+import { MapContainer, TileLayer, CircleMarker, Marker } from 'react-leaflet';
+import 'leaflet/dist/leaflet.css';
 
 const CARD = { backgroundColor: 'rgba(13, 26, 46, 0.6)', borderColor: '#1a2d4a' };
 
@@ -80,23 +82,64 @@ function Breadcrumb({ corridor, toll }) {
   );
 }
 
-/* ─── Street View Panel ─── */
-function StreetViewPanel({ toll, corridorColor }) {
-  const url = toll.streetViewUrl ||
-    `https://www.google.com/maps/embed?pb=!1m14!1m12!1m3!1d1500!2d${toll.lng}!3d${toll.lat}!2m3!1f0!2f0!3f0!3m2!1i1024!2i768!4f13.1!5e1!3m2!1ses!2sco`;
-
+/* ─── Radar de Peaje (Leaflet Dark) ─── */
+function RadarPanel({ toll, corridorColor }) {
   return (
-    <div className="rounded-lg border overflow-hidden" style={CARD}>
-      <div className="flex items-center justify-between px-3 py-2 border-b" style={{ borderColor: '#1a2d4a' }}>
-        <div className="flex items-center gap-2">
-          <MapPin className="w-3 h-3" style={{ color: corridorColor }} />
-          <span className="text-xs font-semibold text-white">{toll.name}</span>
-          <span className="text-[10px] text-slate-500 font-mono">{toll.km}</span>
-        </div>
-        <span className="text-[9px] text-slate-600">{toll.department}</span>
+    <div className="rounded-lg border overflow-hidden relative" style={{ ...CARD, height: 260 }}>
+      <div className="absolute top-2 left-2 z-[400] px-2 py-1 bg-black/60 rounded border flex items-center gap-2" style={{ borderColor: `${corridorColor}33` }}>
+        <MapPin className="w-3 h-3" style={{ color: corridorColor }} />
+        <span className="text-[10px] uppercase tracking-wider font-mono text-slate-300">Radar DITRA</span>
+        <span className="text-[10px] text-slate-500 font-mono ml-2">{toll.km}</span>
       </div>
-      <iframe src={url} width="100%" height="220" style={{ border: 0 }}
-        allowFullScreen loading="lazy" referrerPolicy="no-referrer-when-downgrade" title={toll.name} />
+      
+      <MapContainer 
+        center={[toll.lat, toll.lng]} 
+        zoom={10} 
+        className="w-full h-full"
+        zoomControl={false}
+      >
+        <TileLayer
+          url="https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png"
+          attribution='&copy; <a href="https://carto.com/">CARTO</a>'
+        />
+        
+        {/* Pulsing Radar Effect */}
+        <div className="leaflet-pane leaflet-overlay-pane">
+           <style>
+            {`
+              @keyframes pulseRadar {
+                0% { transform: scale(1); opacity: 0.8; }
+                100% { transform: scale(4); opacity: 0; }
+              }
+              .radar-pulse-marker {
+                width: 12px; height: 12px;
+                background-color: ${corridorColor};
+                border-radius: 50%;
+                position: relative;
+                box-shadow: 0 0 10px ${corridorColor};
+              }
+              .radar-pulse-marker::after {
+                content: '';
+                position: absolute;
+                top: 0; left: 0; right: 0; bottom: 0;
+                border-radius: 50%;
+                background-color: ${corridorColor};
+                animation: pulseRadar 2s infinite ease-out;
+              }
+            `}
+           </style>
+        </div>
+
+        <Marker position={[toll.lat, toll.lng]} icon={
+           // Usamos un HTML genérico porque leaflet nativo es tedioso en react-scripts sin loader
+           new window.L.DivIcon({
+             className: 'custom-radar-icon',
+             html: '<div class="radar-pulse-marker"></div>',
+             iconSize: [12, 12],
+             iconAnchor: [6, 6]
+           })
+        } />
+      </MapContainer>
     </div>
   );
 }
@@ -193,7 +236,7 @@ function TollAlertFeed({ alerts, corridorColor }) {
 /* ─── Sensor Panel (KPIs) ─── */
 function SensorPanel({ metrics, corridorColor, speedLimit }) {
   const kpis = [
-    { label: 'Vehículos Hoy', value: (metrics.vehiclesTotal || 0).toLocaleString('es-CO'), icon: Car, color: corridorColor },
+    { label: 'Vehículos Hoy', value: (metrics.vehiclesTotalDisplay || metrics.vehiclesTotal || 0).toLocaleString('es-CO'), icon: Car, color: corridorColor },
     { label: 'Flujo / Hora', value: `${metrics.vehiclesHour || 0}`, icon: Activity, color: '#6366f1' },
     { label: 'Velocidad Media', value: `${metrics.avgSpeed || 0} km/h`, icon: Gauge,
       color: (metrics.avgSpeed || 0) > speedLimit ? '#ef4444' : (metrics.avgSpeed || 0) < 40 ? '#f59e0b' : '#22c55e' },
@@ -320,7 +363,7 @@ export default function TollPage() {
 
           {/* COLUMNA IZQUIERDA — 5/12 */}
           <div className="col-span-12 xl:col-span-5 space-y-3 order-2 xl:order-1">
-            <StreetViewPanel toll={toll} corridorColor={corridor.color} />
+            <RadarPanel toll={toll} corridorColor={corridor.color} />
             <LaneStatusPanel lanes={data.lanes} corridorColor={corridor.color} />
             <TollAlertFeed alerts={data.alerts} corridorColor={corridor.color} />
           </div>

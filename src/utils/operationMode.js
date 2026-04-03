@@ -8,6 +8,7 @@
  */
 
 const TZ = 'America/Bogota';
+import { useTrafficStore } from '../store/trafficStore';
 
 /**
  * Calendario de operaciones DITRA 2026
@@ -134,7 +135,12 @@ const RETORNO_PROGRESSIVE_SCALE = {
 export function getOperationMode() {
   const dateStr = getColombiaDate();
   const hour = getColombiaHour();
-  const entry = OPERATION_CALENDAR[dateStr];
+  
+  // Utiliza el calendario descargado del backend si existe, sino el fallback local.
+  const stateCalendar = useTrafficStore.getState().calendar;
+  const calendar = (stateCalendar && Object.keys(stateCalendar).length > 0) ? stateCalendar : OPERATION_CALENDAR;
+  
+  const entry = calendar[dateStr];
 
   if (entry) {
     if (entry.mode === 'retorno_progresivo') {

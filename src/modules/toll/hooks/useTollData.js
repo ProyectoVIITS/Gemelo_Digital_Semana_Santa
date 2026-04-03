@@ -167,19 +167,42 @@ function buildSnapshot(irt, stationId, realTraffic = null) {
   const isPeakNow = (hour >= 7 && hour <= 9) || (hour >= 14 && hour <= 16);
 
   let occup;
+  // Multiplicador agresivo para colapsar las variables en la noche/madrugada.
+  // Si no hay tráfico real medible y son las 2AM, el hourFactor es ~0.05.
+  const timeContextMultiplier = isValley ? (hourFactor * 4) : 1; // De noche corta dramáticamente la congestión
+  
   if (realTraffic && realTraffic.congestionRatio != null) {
-    // Ocupación directa de APIs: congestionRatio 0→10%, 0.5→55%, 1.0→98%
-    occup = clamp(Math.round(10 + realTraffic.congestionRatio * 88 + rnd(2)), 5, 98);
-  } else if (isRetorno && irt > 85) {
-    occup = clamp(Math.round(88 + (irt - 85) * 0.8 + rnd(2)), 88, 98);
-  } else if (isRetorno && irt > 65) {
-    occup = clamp(Math.round(70 + (irt - 65) * 0.9 + rnd(3)), 70, 90);
-  } else if (isRetorno && irt > 40) {
-    occup = clamp(Math.round(40 + (irt - 40) * 1.1 + rnd(4)), 40, 72);
+    occup = clamp(Math.round(10 + realTraffic.congestionRatio * 88 + (Math.random()*4 - 2)), 5, 98);
+  } else if (isRetorno && (irt * timeContextMultiplier) > 85) {
+    occup = clamp(Math.round(88 + ((irt * timeContextMultiplier) - 85) * 0.8 + (Math.random()*2 - 1)), 88, 98);
+  } else if (isRetorno && (irt * timeContextMultiplier) > 65) {
+    occup = clamp(Math.round(70 + ((irt * timeContextMultiplier) - 65) * 0.9 + (Math.random()*2 - 1)), 70, 90);
+  } else if (isRetorno && (irt * timeContextMultiplier) > 40) {
+    occup = clamp(Math.round(40 + ((irt * timeContextMultiplier) - 40) * 1.1 + (Math.random()*3 - 1.5)), 40, 72);
   } else {
-    occup = clamp(Math.round(irt * 0.45 + hourFactor * 30 + 5 + rnd(4)), 3, 95);
+    occup = clamp(Math.round(irt * 0.45 * timeContextMultiplier + hourFactor * 30 + 5 + (Math.random()*4 - 2)), 3, 95);
   }
-  const c4closed = irt > 82;
+  const c4closed = (irt * timeContextMultiplier) > 82;
+
+  // ── FLUJO / HORA REALISTA CINEMÁTICO (Q = K * V) ──
+  // Si tenemos ocupación y velocidad realista (de API Google o estimada),
+  // el flujo debe respetar el diagrama fundamental del tráfico.
+  const densityK = occup * 1.6; // veh / km
+  let cinematiqFlow = Math.round(densityK * speed);
+  
+  // En horas súper valle (ej. 1AM, 2AM), el flow debe ser hiper bajo, no solo bajo por densidad.
+  if (hourFactor < 0.1) {
+     cinematiqFlow *= hourFactor * 5; // Aún más castigo en la madrugada
+  }
+  
+  // Limites realistas para la infraestructura colombiana
+  const maxCapacity = 2400; // Máximo teórico por hora Colombia
+  cinematiqFlow = clamp(cinematiqFlow, 6, maxCapacity);
+
+  // ── Acumulador de Vehículos Hoy ──
+  // Este no se inicializará aquí sino de forma monótona en el Hook, 
+  // pero calculamos el baseline baseFlow solo para la primera carga.
+  const baselineFlowAprox = flowProfile.slice(0, hour + 1).reduce((s, f) => s + f * 560, 0) * ssMultiplier;
 
   // ─── Colas: patrón por modo de operación ───
   const opModeSnap = getOperationMode();
@@ -343,10 +366,9 @@ function buildSnapshot(irt, stationId, realTraffic = null) {
     });
   }
 
-  const accumulatedFlow = flowProfile.slice(0, hour + 1).reduce((s, f) => s + f * 560, 0);
   const metrics = {
-    vehiclesTotal: Math.round(accumulatedFlow * ssMultiplier + rnd(50)),
-    vehiclesHour: flow,
+    vehiclesTotalBaseline: baselineFlowAprox, // Usado para inicializar el contador mono-tónico
+    vehiclesHour: cinematiqFlow,
     avgSpeed: speed,
     occupancy: occup,
     irt: Math.round(irt),
@@ -439,8 +461,30 @@ export default function useTollData(stationId, corridorId, realTraffic = null) {
         }
 
         const snapshot = buildSnapshot(irt, stationId, realTraffic);
+        
+        let initialTotal = prev.metrics?.vehiclesTotal;
+        // Iniciar de forma limpia en el primer render
+        if (!initialTotal) {
+           initialTotal = Math.round(snapshot.metrics.vehiclesTotalBaseline);
+        }
+
+        // Incremento cinemático microscópico real: 
+        // Si el flujo es X veh/h, en 1.8 segundos pasarán Y veh.
+        const secondsPassed = 1.8;
+        const incrementalVehicles = (snapshot.metrics.vehiclesHour / 3600) * secondsPassed;
+        
+        // Sumar al total histórico, evitamos rnd que hace saltar el número
+        const newTotal = initialTotal + incrementalVehicles;
+        snapshot.metrics.vehiclesTotal = newTotal;
+
         return {
           ...snapshot,
+          metrics: {
+             ...snapshot.metrics,
+             // Mostramos al usuario redondeado, pero guardamos flotante para precisión
+             vehiclesTotalDisplay: Math.floor(newTotal),
+             vehiclesTotal: newTotal 
+          },
           speedHistory: updateHistory(prev.speedHistory, irt, realTraffic?.currentSpeed),
           alerts: [...newAlerts, ...prev.alerts].slice(0, 8),
         };

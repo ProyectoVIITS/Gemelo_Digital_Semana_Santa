@@ -14,6 +14,7 @@ import { useGlobalAlerts } from '../../hooks/useGlobalAlerts';
 import { useAccidentData } from '../../hooks/useAccidentData';
 import { getNivelRiesgo, RIESGO_COLORS, RIESGO_LABELS, RIESGO_RANGES } from '../../data/accidentUtils';
 import MonitorLoadingScreen from './LoadingScreen';
+import { useTrafficStore } from '../../store/trafficStore';
 
 /* ─── Shared style constants (matching Chuzacá) ─── */
 const CARD = { backgroundColor: 'rgba(13, 26, 46, 0.6)', borderColor: '#1a2d4a' };
@@ -155,7 +156,7 @@ function CorridorCard({ corridor, data, irtHistory, alertCount, onNavigate }) {
 
         {/* Sparkline */}
         <div className="flex items-center gap-2">
-          <div className="flex-1 h-7">
+          <div className="flex-1" style={{ height: 28, minHeight: 28, minWidth: 100 }}>
             {(irtHistory || []).length > 2 && (
               <ResponsiveContainer width="100%" height="100%">
                 <LineChart data={irtHistory}>
@@ -643,111 +644,106 @@ function AccidentLegend({ accData }) {
 
 /* ─── ALERTA DITRA: Panel de congestión en tiempo real para reporte Policía ─── */
 function AlertaDITRA({ corridorData }) {
-  const [wazeJams, setWazeJams] = React.useState([]);
-  const [lastUpdate, setLastUpdate] = React.useState(null);
+  const wazeJams = useTrafficStore(state => state.nationalWazeJams) || [];
   const hour = getColombiaHour();
+  
+  // Siempre visible, diseño de centro de comando
+  const isPeakAlert = hour >= 16 && hour <= 20;
 
-  // Solo visible entre 5AM y 23PM (siempre activo en horario operativo éxodo)
-  const isVisible = hour >= 5 && hour <= 23;
-
-  React.useEffect(() => {
-    if (!isVisible) return;
-    async function fetchWaze() {
-      try {
-        const IS_PROD = window.location.hostname !== 'localhost';
-        const url = IS_PROD ? '/api/waze-tvt' : 'https://www.waze.com/row-partnerhub-api/feeds-tvt/?id=1761151881648';
-        const res = await fetch(url);
-        if (!res.ok) return;
-        const json = await res.json();
-        const jams = (json.irregularities || [])
-          .filter(j => j.jamLevel >= 3 && j.type !== 'STATIC') // Excluir eventos estáticos (procesiones, cierres programados)
-          .sort((a, b) => {
-            if (b.jamLevel !== a.jamLevel) return b.jamLevel - a.jamLevel;
-            return (b.length || 0) - (a.length || 0);
-          })
-          .slice(0, 10);
-        setWazeJams(jams);
-        setLastUpdate(new Date());
-      } catch (e) { /* silently fail */ }
-    }
-    fetchWaze();
-    const id = setInterval(fetchWaze, 180000); // cada 3 min
-    return () => clearInterval(id);
-  }, [isVisible]);
-
-  if (!isVisible || wazeJams.length === 0) return null;
-
-  // Top 5 corredores VIITS por IRT
+  // Top corredores VIITS por IRT
   const topCorridors = NEXUS_CORRIDORS
     .map(c => ({ ...c, irt: corridorData[c.id]?.irt || 0 }))
     .sort((a, b) => b.irt - a.irt)
     .slice(0, 5);
 
-  const isPeakAlert = hour >= 17 && hour <= 19;
-
   return (
-    <div className="rounded-lg border-2 p-4 mb-3" style={{
-      backgroundColor: 'rgba(220, 38, 38, 0.06)',
-      borderColor: isPeakAlert ? '#dc2626' : '#f59e0b',
-      animation: isPeakAlert ? 'pulse 2s infinite' : 'none',
+    <div className="relative rounded-2xl border p-5 mb-4 overflow-hidden group shadow-2xl" style={{
+      backgroundColor: 'rgba(15, 23, 42, 0.7)',
+      backdropFilter: 'blur(16px)',
+      borderColor: isPeakAlert ? 'rgba(239, 68, 68, 0.3)' : 'rgba(245, 158, 11, 0.2)',
+      boxShadow: isPeakAlert ? '0 0 40px rgba(239, 68, 68, 0.1)' : '0 0 30px rgba(245, 158, 11, 0.05)',
+      animation: isPeakAlert ? 'pulse-border 3s infinite' : 'none'
     }}>
-      <style>{`@keyframes pulse { 0%,100% { border-color: #dc2626; } 50% { border-color: #7f1d1d; } }`}</style>
+      <style>{`
+        @keyframes pulse-border { 0%,100% { border-color: rgba(239, 68, 68, 0.4); box-shadow: 0 0 40px rgba(239, 68, 68, 0.15); } 50% { border-color: rgba(153, 27, 27, 0.2); box-shadow: 0 0 20px rgba(239, 68, 68, 0.05); } }
+        /* Animación para barras de slider de tráfico */
+        @keyframes flow-gradient { 0% { background-position: 100% 0; } 100% { background-position: -100% 0; } }
+      `}</style>
+      
+      {/* Background radial gradient */}
+      <div className="absolute top-0 right-0 w-96 h-96 bg-red-500/5 rounded-full blur-[100px] pointer-events-none" />
 
-      <div className="flex items-center gap-3 mb-3">
-        <div className="w-8 h-8 rounded-full flex items-center justify-center" style={{
-          backgroundColor: isPeakAlert ? 'rgba(220, 38, 38, 0.2)' : 'rgba(245, 158, 11, 0.2)',
+      {/* Header */}
+      <div className="flex items-center gap-4 mb-4 relative z-10">
+        <div className="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0 shadow-lg" style={{
+          background: isPeakAlert ? 'linear-gradient(135deg, #ef4444, #991b1b)' : 'linear-gradient(135deg, #f59e0b, #b45309)',
         }}>
-          <AlertTriangle className="w-4 h-4" style={{ color: isPeakAlert ? '#dc2626' : '#f59e0b' }} />
+          <AlertTriangle className="w-5 h-5 text-white" />
         </div>
         <div>
-          <div className="text-xs font-bold uppercase tracking-wider" style={{ color: isPeakAlert ? '#dc2626' : '#f59e0b' }}>
-            {isPeakAlert ? '🚨 ALERTA DITRA — REPORTE POLICÍA NACIONAL' : '⚠ MONITOR DE CONGESTIÓN VIAL — DITRA'}
+          <div className="text-sm font-bold uppercase tracking-[0.2em] text-white flex items-center gap-2">
+            {isPeakAlert ? '🚨 ALERTA DITRA — REPORTE POLICÍA NACIONAL' : '⚠ MONITOR DE CONGESTIÓN VIAL'}
+            <div className="px-2 py-0.5 rounded text-[8px] tracking-widest font-bold bg-white/10 text-white/90">LIVE</div>
           </div>
-          <div className="text-[9px] text-slate-400">
-            Datos Waze en tiempo real · {lastUpdate ? lastUpdate.toLocaleTimeString('es-CO', { timeZone: 'America/Bogota', hour: '2-digit', minute: '2-digit' }) : '...'} · Semana Santa 2026
+          <div className="text-[10px] text-slate-400 tracking-wide mt-0.5 font-mono">
+            Radar Global Waze TVT · Datos Sincronizados · Top Nacional ({wazeJams.length} incidentes críticos)
           </div>
         </div>
       </div>
 
       {/* Top corredores VIITS por IRT */}
-      <div className="mb-3">
-        <div className="text-[9px] uppercase tracking-wider text-slate-500 mb-1.5">Corredores VIITS — IRT más alto</div>
-        <div className="grid grid-cols-5 gap-1.5">
+      <div className="mb-4 relative z-10">
+        <div className="text-[9px] uppercase tracking-[0.15em] text-slate-500 mb-2">Corredores Principales (Top IRT)</div>
+        <div className="grid grid-cols-5 gap-2">
           {topCorridors.map(c => {
             const level = getIRTLevel(c.irt);
             return (
-              <div key={c.id} className="rounded px-2 py-1.5 text-center border" style={{
-                backgroundColor: `${level.color}10`, borderColor: `${level.color}30`,
+              <div key={c.id} className="rounded-lg px-3 py-2 border relative overflow-hidden transition-colors hover:bg-white/5" style={{
+                backgroundColor: `${level.color}0a`, borderColor: `${level.color}30`,
               }}>
-                <div className="font-mono text-sm font-bold" style={{ color: level.color }}>{c.irt}</div>
-                <div className="text-[8px] text-slate-400 truncate">{c.shortName}</div>
+                <div className="absolute top-0 left-0 w-1 h-full" style={{ backgroundColor: level.color }} />
+                <div className="font-mono text-lg font-bold" style={{ color: level.color }}>{c.irt}</div>
+                <div className="text-[9px] text-slate-400 truncate">{c.shortName}</div>
               </div>
             );
           })}
         </div>
       </div>
 
-      {/* Top jams Waze con links a peajes/simulación */}
-      <div>
-        <div className="text-[9px] uppercase tracking-wider text-slate-500 mb-1.5">
-          Top puntos de congestión Waze — Colombia ({wazeJams.length} tramos nivel ≥3) · Click para ver simulación
+      {/* Top 10 jams Waze */}
+      <div className="relative z-10">
+        <div className="flex items-center justify-between mb-2">
+          <div className="text-[9px] uppercase tracking-[0.15em] text-slate-500">
+            Top puntos de congestión críticos (Nivel ≥3)
+          </div>
         </div>
-        <div className="space-y-1">
-          {wazeJams.slice(0, 7).map((jam, i) => {
-            const colaKm = ((jam.length || 0) / 1000).toFixed(1);
-            const tiempoMin = Math.round((jam.time || 0) / 60);
-            const ratio = jam.historicTime > 0 ? (jam.time / jam.historicTime).toFixed(1) : '?';
+        <div className="space-y-1.5">
+          {wazeJams.length === 0 ? (
+            <div className="text-center py-6 px-4 border border-dashed rounded-lg border-slate-700/50 bg-slate-800/20">
+              <span className="text-slate-400 text-xs tracking-widest uppercase">
+                ✅ Sin congestión crítica a nivel nacional en este momento
+              </span>
+            </div>
+          ) : wazeJams.map((jam, i) => {
+              const colaKm = ((jam.length || 0) / 1000).toFixed(1);
+              const tiempoMin = Math.round((jam.time || 0) / 60);
+            
+            let ratioValue = 1;
+            if (jam.historicTime > 0) ratioValue = (jam.time / jam.historicTime);
+            const ratio = ratioValue > 1 ? ratioValue.toFixed(1) : '?';
+            
             const hasAccident = jam.leadAlert?.type === 'ACCIDENT';
             const isClosed = jam.leadAlert?.type === 'ROAD_CLOSED';
-            const levelColor = jam.jamLevel >= 4 ? '#dc2626' : '#f59e0b';
-
-            // Match con peajes VIITS: buscar peaje más cercano
+            const isSevere = jam.jamLevel >= 4 || ratioValue >= 4;
+            const levelColor = jam.jamLevel >= 4 ? '#ef4444' : '#f59e0b';
+            
+            // Match con peajes VIITS
             const jamCenter = jam.line?.[Math.floor((jam.line?.length || 0) / 2)];
             let matchedToll = null;
             let matchedCorridor = null;
             if (jamCenter) {
               const R = 6371;
-              let minDist = 15; // radio máximo 15km
+              let minDist = 15; 
               NEXUS_CORRIDORS.forEach(c => {
                 c.tollStations.forEach(t => {
                   const dLat = (t.lat - jamCenter.y) * Math.PI / 180;
@@ -761,45 +757,84 @@ function AlertaDITRA({ corridorData }) {
 
             const linkUrl = matchedToll
               ? `/monitor/${matchedCorridor.id}/${matchedToll.id.toLowerCase()}`
-              : `/monitor/waze/${jam.id || i}`;
+              : `/monitor/waze/${jam.uuid || jam.id || i}`;
+
+            // Calculando UI de barra
+            const ratioPct = Math.min(100, Math.max(0, (ratioValue / 10) * 100)); // 10x is 100%
 
             return (
-              <div key={jam.id || i}
-                className="flex items-center gap-2 rounded px-2 py-1.5 border text-[10px] cursor-pointer hover:bg-slate-800/60 transition-colors"
-                style={{ backgroundColor: 'rgba(6, 17, 30, 0.5)', borderColor: `${levelColor}30` }}
+              <div key={jam.uuid || jam.id || i}
+                className="flex items-center gap-3 rounded-lg px-3 py-2.5 border transition-all hover:scale-[1.01] hover:bg-slate-800/80 cursor-pointer relative overflow-hidden group"
+                style={{ backgroundColor: 'rgba(15, 23, 42, 0.4)', borderColor: isSevere ? `${levelColor}40` : `${levelColor}20`,
+                         boxShadow: isSevere ? `0 0 15px ${levelColor}15` : 'none' }}
                 onClick={() => { window.location.href = linkUrl; }}
               >
-                <div className="w-5 h-5 rounded flex items-center justify-center flex-shrink-0 font-mono font-bold text-[9px]" style={{
-                  backgroundColor: `${levelColor}20`, color: levelColor,
+                {/* Highlight slider en la fila cuando el mouse pasa */}
+                <div className="absolute inset-0 opacity-0 group-hover:opacity-10 transition-opacity bg-gradient-to-r from-transparent via-white to-transparent pointer-events-none" />
+                
+                {/* Nivel indicator */}
+                <div className="w-7 h-7 rounded-md flex items-center justify-center flex-shrink-0 font-mono font-bold text-[13px]" style={{
+                  background: `linear-gradient(135deg, ${levelColor}40, ${levelColor}10)`, 
+                  color: levelColor, border: `1px solid ${levelColor}40`,
+                  boxShadow: isSevere ? `0 0 10px ${levelColor}40` : 'none'
                 }}>
                   {jam.jamLevel}
                 </div>
+
+                {/* Name y etiquetas */}
                 <div className="flex-1 min-w-0">
-                  <div className="text-slate-300 truncate font-medium">
-                    {jam.name || 'Tramo sin nombre'}
-                    {hasAccident && <span className="ml-1 text-red-400">⚠ ACCIDENTE</span>}
-                    {isClosed && <span className="ml-1 text-red-500">🚫 CERRADA</span>}
+                  <div className="text-slate-200 truncate font-semibold text-[11px] tracking-wide">
+                    {jam.name || 'Tramo Departamental'}
+                    {hasAccident && <span className="ml-1.5 px-1.5 py-0.5 rounded-sm bg-red-500/20 text-red-400 text-[8px] uppercase tracking-widest border border-red-500/30 font-bold">⚠ ACCIDENTE</span>}
+                    {isClosed && <span className="ml-1.5 px-1.5 py-0.5 rounded-sm bg-red-900/40 text-red-500 text-[8px] uppercase tracking-widest border border-red-500/30 font-bold">🚫 CERRADO</span>}
                   </div>
-                  {matchedToll && (
-                    <div className="flex items-center gap-1 mt-0.5">
-                      <span className="px-1 py-px rounded text-[8px] font-mono" style={{
-                        backgroundColor: `${matchedCorridor.color}20`, color: matchedCorridor.color,
-                      }}>{matchedCorridor.id}</span>
-                      <span className="text-[8px] text-cyan-400">→ {matchedToll.name}</span>
-                      <ChevronRight className="w-3 h-3 text-cyan-400" />
-                    </div>
-                  )}
-                  {!matchedToll && (
-                    <div className="flex items-center gap-1 mt-0.5">
-                      <span className="px-1 py-px rounded text-[8px] font-mono bg-purple-500/20 text-purple-400">WAZE</span>
-                      <span className="text-[8px] text-purple-300">Ver simulación del tramo →</span>
-                    </div>
-                  )}
+                  <div className="flex items-center mt-1">
+                    {matchedToll ? (
+                      <div className="flex items-center gap-1.5">
+                        <span className="px-1 py-0.5 rounded text-[8px] font-mono font-bold" style={{
+                          backgroundColor: `${matchedCorridor.color}20`, color: matchedCorridor.color, border: `1px solid ${matchedCorridor.color}40`
+                        }}>{matchedCorridor.id}</span>
+                        <span className="text-[9px] text-cyan-400/80">→ {matchedToll.name}</span>
+                      </div>
+                    ) : (
+                      <div className="flex items-center gap-1.5">
+                        <span className="px-1 py-0.5 rounded text-[8px] font-mono font-bold border border-purple-500/30" style={{
+                           background: 'linear-gradient(45deg, rgba(168,85,247,0.2), rgba(168,85,247,0.05))', color: '#c084fc'
+                        }}>WAZE</span>
+                        <span className="text-[9px] text-purple-300">Simulador Global →</span>
+                      </div>
+                    )}
+                  </div>
                 </div>
-                <div className="flex items-center gap-3 flex-shrink-0 font-mono text-[9px]">
-                  <span className="text-orange-400">{colaKm} km</span>
-                  <span className="text-red-400">{tiempoMin} min</span>
-                  <span className="text-slate-500">{ratio}x</span>
+
+                {/* Métricas y Barra UI */}
+                <div className="flex items-center gap-4 flex-shrink-0 font-mono">
+                  <div className="flex flex-col items-end w-12">
+                    <span className="text-[12px] text-slate-300 font-bold">{colaKm} km</span>
+                    <span className="text-[8px] text-slate-500 tracking-widest">COLA</span>
+                  </div>
+                  <div className="w-px h-6 bg-slate-700/50" />
+                  <div className="flex flex-col items-end w-12">
+                    <span className="text-[12px] font-bold" style={{ color: isSevere ? '#ef4444' : '#f59e0b' }}>{tiempoMin} min</span>
+                    <span className="text-[8px] text-slate-500 tracking-widest">DEMORA</span>
+                  </div>
+                  <div className="w-px h-6 bg-slate-700/50" />
+                  
+                  {/* Multiplier con Barra */}
+                  <div className="w-24 pl-1">
+                    <div className="flex justify-between items-end mb-1">
+                      <span className="text-[8px] text-slate-500 tracking-widest">MULTIPLICADOR</span>
+                      <span className="text-[12px] font-bold" style={{ color: ratioValue >= 5 ? '#ef4444' : '#fbbf24' }}>{ratio}x</span>
+                    </div>
+                    <div className="h-1.5 w-full bg-slate-800 rounded-full overflow-hidden border border-slate-700/50">
+                      <div className="h-full rounded-full transition-all duration-1000" 
+                           style={{ 
+                             width: `${ratioPct}%`, 
+                             background: ratioValue >= 5 ? 'linear-gradient(90deg, #f97316, #ef4444)' : 'linear-gradient(90deg, #ca8a04, #f59e0b)',
+                             boxShadow: ratioValue >= 5 ? '0 0 10px #ef4444' : 'none'
+                           }} />
+                    </div>
+                  </div>
                 </div>
               </div>
             );
@@ -807,13 +842,13 @@ function AlertaDITRA({ corridorData }) {
         </div>
       </div>
 
-      {isPeakAlert && (
-        <div className="mt-3 pt-2 border-t text-center" style={{ borderColor: 'rgba(220, 38, 38, 0.2)' }}>
-          <div className="text-[9px] text-red-400 font-mono">
-            REPORTE GENERADO PARA POLICÍA NACIONAL · DITRA · MINTRANSPORTE · {new Date().toLocaleDateString('es-CO', { timeZone: 'America/Bogota' })}
-          </div>
+      <div className="mt-4 pt-3 border-t text-center relative z-10" style={{ borderColor: 'rgba(148, 163, 184, 0.1)' }}>
+        <div className="text-[9px] text-slate-500 font-mono tracking-widest uppercase flex items-center justify-center gap-2">
+          <span>CENTRO DE CONTROL DITRA — {new Date().toLocaleDateString('es-CO')}</span>
+          <span className="w-1 h-1 rounded-full bg-slate-600" />
+          <span>MINTRANSPORTE COLOMBIA</span>
         </div>
-      )}
+      </div>
     </div>
   );
 }

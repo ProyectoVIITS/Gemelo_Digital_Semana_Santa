@@ -447,48 +447,116 @@ export default function TollCanvas({
       const cat = VEHICLE_CATEGORIES[v.category];
       if (!cat) continue;
       const cy = v.isMoto ? v.motoY : laneY(v.lane, roadTop, roadBot, numLanes);
-      const vw = isMini ? cat.width * 0.65 : cat.width;
-      const vh = isMini ? cat.height * 0.65 : cat.height;
-      const headlightDir = v.isCounter ? -1 : 1; // counter vehicles face left
+      
+      const pxLength = isMini ? cat.width * 0.65 : cat.width;
+      const pxWidth  = isMini ? cat.height * 0.65 : cat.height;
+      const isRetorno = v.isCounter;
+
+      // Saber si está frenando
+      const isBraking = v.state === 'queued' || (v.state === 'approaching' && v.speed < 20) || v.state === 'at-booth';
+      const headlightDir = isRetorno ? -1 : 1; 
 
       if (cat.isMoto) {
-        // Motorcycle — small oval shape on berma
-        ctx.fillStyle = v.isCounter ? '#86efac' : cat.color; // counter motos slightly different green
-        ctx.globalAlpha = v.isCounter ? 0.6 : 0.85;
+        // Moto Premium
+        ctx.save();
+        ctx.translate(v.x, cy);
+        
+        ctx.fillStyle = isRetorno ? '#86efac' : cat.color; 
+        ctx.shadowColor = 'rgba(0,0,0,0.5)';
+        ctx.shadowBlur = 4;
         ctx.beginPath();
-        ctx.ellipse(v.x, cy, vw / 2, vh / 2, 0, 0, Math.PI * 2);
+        // Cuerpo moto
+        ctx.roundRect(-pxLength/2, -pxWidth/2, pxLength, pxWidth, 2);
         ctx.fill();
-        if (v.state === 'approaching' || v.state === 'departing') {
-          ctx.fillStyle = 'rgba(255, 255, 200, 0.7)';
-          ctx.beginPath();
-          ctx.arc(v.x + headlightDir * (vw / 2), cy, 1, 0, Math.PI * 2);
-          ctx.fill();
-        }
-        ctx.globalAlpha = 1;
+        ctx.shadowBlur = 0;
+
+        // Casco piloto (circulo centrado)
+        ctx.fillStyle = '#1e293b';
+        ctx.beginPath();
+        ctx.arc(0, 0, pxWidth * 0.4, 0, Math.PI * 2);
+        ctx.fill();
+
+        // Linterna motos
+        ctx.fillStyle = 'rgba(255, 255, 200, 0.9)';
+        ctx.fillRect(headlightDir * (pxLength/2), -1, headlightDir * 2, 2);
+
+        ctx.restore();
       } else {
-        // Regular vehicles
-        ctx.fillStyle = v.isCounter ? adjustAlpha(cat.color, 0.55) : cat.color;
+        // High fidelity Top-Down Vehicle
+        ctx.save();
+        ctx.translate(v.x, cy);
+        
+        ctx.shadowColor = 'rgba(0,0,0,0.5)';
+        ctx.shadowBlur = isMini ? 2 : 4;
+        ctx.shadowOffsetY = 2;
+
+        const baseColor = isRetorno ? adjustAlpha(cat.color, 0.65) : cat.color;
+
+        // Chasis (Cuerpo)
+        ctx.fillStyle = baseColor;
         ctx.beginPath();
-        ctx.roundRect(v.x - vw / 2, cy - vh / 2, vw, vh, 2);
+        // Nota: TollCanvas usa centro (0,0) por mi traslación
+        ctx.roundRect(-pxLength/2, -pxWidth/2, pxLength, pxWidth, Math.max(1, pxWidth * 0.15));
         ctx.fill();
 
-        // Headlights — direction-aware
-        if (!isMini && v.state !== 'at-booth' && v.state !== 'queued') {
-          ctx.fillStyle = v.isCounter ? 'rgba(255, 200, 200, 0.5)' : 'rgba(255, 255, 200, 0.6)';
-          ctx.beginPath();
-          ctx.arc(v.x + headlightDir * (vw / 2 + 2), cy - 2, 1.5, 0, Math.PI * 2);
-          ctx.arc(v.x + headlightDir * (vw / 2 + 2), cy + 2, 1.5, 0, Math.PI * 2);
-          ctx.fill();
+        // Reiniciar sombras
+        ctx.shadowColor = 'transparent';
+        ctx.shadowBlur = 0;
+        ctx.shadowOffsetY = 0;
+
+        // Techo (Color Base + Oscurecido 15%)
+        ctx.fillStyle = 'rgba(0,0,0,0.15)';
+        ctx.beginPath();
+        ctx.roundRect(-pxLength*0.1, -pxWidth*0.4, pxLength*0.4, pxWidth*0.8, 1);
+        ctx.fill();
+
+        // Dirección de vidrios dependiendo si va Der->Izq (Retorno) o Izq->Der (Salida)
+        const frontX = isRetorno ? -pxLength*0.45 : pxLength*0.15;
+        const backX  = isRetorno ? pxLength*0.15  : -pxLength*0.45;
+
+        // Parabrisas Frontal
+        ctx.fillStyle = 'rgba(15, 23, 42, 0.9)'; 
+        ctx.beginPath();
+        ctx.roundRect(frontX, -pxWidth*0.35, pxLength*0.15, pxWidth*0.7, 1);
+        ctx.fill();
+        
+        // Parabrisas Trasero
+        ctx.fillStyle = 'rgba(15, 23, 42, 0.8)';
+        ctx.beginPath();
+        ctx.roundRect(backX, -pxWidth*0.35, pxLength*0.15, pxWidth*0.7, 1);
+        ctx.fill();
+
+        // ── LUCES DE FRENADO (Tail Lights) ──
+        // En vehículos regulares, stop lights están atrás.
+        const tailX = isRetorno ? (pxLength/2 - 2) : (-pxLength/2);
+        const tailColor = isBraking ? '#ef4444' : 'rgba(127, 29, 29, 0.5)';
+        
+        ctx.fillStyle = tailColor;
+        if (isBraking) {
+          ctx.shadowColor = '#ef4444';
+          ctx.shadowBlur = isMini ? 3 : 6;
+        }
+        ctx.fillRect(tailX, -pxWidth*0.45, 2, pxWidth*0.2);
+        ctx.fillRect(tailX, pxWidth*0.25, 2, pxWidth*0.2);
+        ctx.shadowBlur = 0;
+
+        // ── FAROS (HeadLights) ──
+        if (!isMini && v.state !== 'queued') {
+          const headX = isRetorno ? (-pxLength/2) : (pxLength/2 - 2);
+          ctx.fillStyle = isRetorno ? 'rgba(255, 200, 200, 0.5)' : '#fef08a';
+          ctx.fillRect(headX, -pxWidth*0.45, 2, pxWidth*0.2);
+          ctx.fillRect(headX, pxWidth*0.25, 2, pxWidth*0.2);
+
+          // Glow antiniebla
+          const glowDir = isRetorno ? -1 : 1;
+          const lightGlow = ctx.createLinearGradient(headX, 0, headX + (12 * glowDir), 0);
+          lightGlow.addColorStop(0, isRetorno ? 'rgba(255, 200, 200, 0.15)' : 'rgba(254, 240, 138, 0.15)');
+          lightGlow.addColorStop(1, 'transparent');
+          ctx.fillStyle = lightGlow;
+          ctx.fillRect(isRetorno ? headX - 12 : headX + 2, -pxWidth*0.5, 12, pxWidth);
         }
 
-        // Tail lights for counter vehicles (red, on right side)
-        if (!isMini && v.isCounter) {
-          ctx.fillStyle = 'rgba(239, 68, 68, 0.5)';
-          ctx.beginPath();
-          ctx.arc(v.x + vw / 2 + 1, cy - 2, 1, 0, Math.PI * 2);
-          ctx.arc(v.x + vw / 2 + 1, cy + 2, 1, 0, Math.PI * 2);
-          ctx.fill();
-        }
+        ctx.restore();
       }
     }
 

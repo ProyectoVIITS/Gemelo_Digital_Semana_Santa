@@ -1,0 +1,17 @@
+{
+  "2026-03-22": { "mode": "retorno_progresivo", "label": "Operación Retorno · Inicio Progresivo", "startHour": 14 },
+  "2026-03-23": { "mode": "retorno", "label": "Operación Retorno · Lunes Festivo" },
+  "2026-03-24": { "mode": "bidireccional", "label": "Tráfico Normal · Martes" },
+  "2026-03-25": { "mode": "bidireccional", "label": "Tráfico Normal · Miércoles" },
+  "2026-03-26": { "mode": "bidireccional", "label": "Tráfico Normal · Jueves" },
+  "2026-03-27": { "mode": "bidireccional", "label": "Presentación DITRA — MinTransporte" },
+  "2026-03-28": { "mode": "exodo", "label": "OPERACIÓN ÉXODO · Inicio Oficial", "level": "normal", "restriccionCarga": { "start": 15, "end": 22 } },
+  "2026-03-29": { "mode": "exodo", "label": "OPERACIÓN ÉXODO · Domingo de Ramos", "level": "normal" },
+  "2026-03-30": { "mode": "exodo", "label": "OPERACIÓN ÉXODO · Lunes Santo", "level": "normal" },
+  "2026-03-31": { "mode": "exodo", "label": "OPERACIÓN ÉXODO · Martes Santo", "level": "alto" },
+  "2026-04-01": { "mode": "exodo", "label": "OPERACIÓN ÉXODO · Miércoles Santo", "level": "alto", "restriccionCarga": { "start": 12, "end": 23 } },
+  "2026-04-02": { "mode": "exodo", "label": "OPERACIÓN ÉXODO · Jueves Santo — ÉXODO PLENO", "level": "pleno", "restriccionCarga": { "start": 6, "end": 15 } },
+  "2026-04-03": { "mode": "exodo", "label": "OPERACIÓN ÉXODO · Viernes Santo", "level": "pleno" },
+  "2026-04-04": { "mode": "retorno_progresivo", "label": "Operación Retorno · Sábado de Gloria", "startHour": 14, "restriccionCarga": { "start": 14, "end": 23 } },
+  "2026-04-05": { "mode": "retorno", "label": "Operación Retorno · Domingo de Resurrección", "restriccionCarga": { "start": 10, "end": 23 } }
+}

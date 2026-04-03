@@ -201,8 +201,10 @@ async function pollOneStation(stationId) {
   const hCache = hereCache[stationId];
   
   const tomtom = await fetchTomTom(stationId);
-  const google = (GKEY && (!gCache || Date.now()-gCache.ts>300000)) ? await fetchGoogle(stationId) : (gCache?.data||null);
-  const here = (HERE_KEY && (!hCache || Date.now()-hCache.ts>600000)) ? await fetchHereIncidents(stationId) : (hCache?.data||null);
+  // Escudo Financiero: Se hace fetch a Google maximo cada 1 HORA (3600000) en lugar de 5 min
+  const google = (GKEY && (!gCache || Date.now()-gCache.ts>3600000)) ? await fetchGoogle(stationId) : (gCache?.data||null);
+  // HERE Map cache: 1 Hora
+  const here = (HERE_KEY && (!hCache || Date.now()-hCache.ts>3600000)) ? await fetchHereIncidents(stationId) : (hCache?.data||null);
   
   const allWazeAlerts = await fetchWazeFeed();
   const allWazeJams = await fetchWazeTvt();

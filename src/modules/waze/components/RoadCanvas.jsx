@@ -241,13 +241,9 @@ export default function RoadCanvas({ jamLevel = 3, jamSpeed = 10, jamRatio = 1 }
         }
       }
 
-      // ─── HUD UI Overlay ───
-      ctx.fillStyle = 'rgba(15, 23, 42, 0.4)';
-      ctx.fillRect(0, 0, width, height); // Oscurecer esquinas
+      // ─── HUD UI Overlay (Removido clearRect destructivo) ───
+      // Opcionalmente un gradiente muy sutil en bordes para destacar.
       
-      // Limpiar un box para destacar el render interno
-      ctx.clearRect(10, roadTopY - 20, width - 20, roadHeight + 40);
-
       // Etiquetas informativas del simulador
       ctx.fillStyle = '#a855f7'; 
       ctx.font = "bold 9px 'JetBrains Mono', monospace";

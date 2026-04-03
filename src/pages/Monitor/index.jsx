@@ -228,9 +228,37 @@ function WazeJamMarker({ jam }) {
     e.originalEvent?.stopPropagation?.();
     map.setView([jamCenter.y, jamCenter.x], 13, { animate: true, duration: 1.5 });
   };
+  const jamPositions = jam.line?.map(pt => [pt.y, pt.x]);
 
   return (
     <React.Fragment>
+      {/* Real Waze Path Line */}
+      {jamPositions && jamPositions.length > 1 && (
+        <React.Fragment>
+           <Polyline
+             positions={jamPositions}
+             pathOptions={{
+               color: levelColor,
+               weight: isSevere ? 7 : 5,
+               opacity: 0.15,
+               lineCap: 'round',
+               lineJoin: 'round',
+             }}
+             eventHandlers={{ click: handleClick }}
+           />
+           <Polyline
+             positions={jamPositions}
+             pathOptions={{
+               color: levelColor,
+               weight: isSevere ? 3 : 2,
+               opacity: 0.85,
+               lineCap: 'round',
+               lineJoin: 'round',
+             }}
+             eventHandlers={{ click: handleClick }}
+           />
+        </React.Fragment>
+      )}
       {/* Outer pulsing ring */}
       <div className={`viits-toll-pulse ${isSevere ? 'critical' : ''}`} style={{
         left: '50%', top: '50%', width: 0, height: 0 /* Leaflet can't overlay HTML easily inside SVG here without Marker, so we use CircleMarker glow */
@@ -331,89 +359,6 @@ function ColombiaMapPanel({ corridorData, onSelectCorridor, onSelectToll, showAc
             opacity={0.45}
           />
 
-          {/* ── Corridor polylines ── */}
-          {corridorLines.map(cl => {
-            const d = corridorData[cl.id];
-            const irt = d?.irt || 0;
-            const weight = irt > 75 ? 3 : irt > 50 ? 2.5 : 1.5;
-            return (
-              <React.Fragment key={cl.id}>
-                {/* Glow layer */}
-                <Polyline
-                  positions={cl.positions}
-                  pathOptions={{
-                    color: cl.color,
-                    weight: weight + 3,
-                    opacity: 0.05,
-                    lineCap: 'round',
-                    lineJoin: 'round',
-                  }}
-                  eventHandlers={{ click: () => onSelectCorridor(cl.id) }}
-                />
-                {/* Main line */}
-                <Polyline
-                  positions={cl.positions}
-                  pathOptions={{
-                    color: cl.color,
-                    weight,
-                    opacity: 0.45,
-                    dashArray: '5 5',
-                    lineCap: 'round',
-                    lineJoin: 'round',
-                  }}
-                  eventHandlers={{ click: () => onSelectCorridor(cl.id) }}
-                />
-              </React.Fragment>
-            );
-          })}
-
-          {/* ── Toll station markers ── */}
-          {allTolls.map(t => {
-            const cd = corridorData[t.corridorId];
-            const td = cd?.tollData?.find(td => td.stationId === t.id);
-            const tirt = td?.irt || cd?.irt || 0;
-            const tl = getIRTLevel(tirt);
-            const isCrit = tirt > 75;
-            const r = t.isCritical ? 7 : 5;
-
-            return (
-              <CircleMarker
-                key={t.id}
-                center={[t.lat, t.lng]}
-                radius={r}
-                pathOptions={{
-                  color: isCrit ? tl.color : t.corridorColor,
-                  fillColor: isCrit ? tl.color : t.corridorColor,
-                  fillOpacity: 0.85,
-                  weight: isCrit ? 2 : 1,
-                  opacity: 1,
-                }}
-                eventHandlers={{
-                  click: (e) => {
-                    e.originalEvent?.stopPropagation?.();
-                    onSelectToll && onSelectToll(t.corridorId, t.id);
-                  },
-                }}
-              >
-                <LTooltip
-                  direction="top"
-                  offset={[0, -8]}
-                  className="viits-toll-label"
-                  permanent={false}
-                >
-                  <div>
-                    <div style={{ fontWeight: 'bold', marginBottom: 2 }}>{t.name}</div>
-                    <div style={{ fontSize: 9, color: '#94a3b8' }}>{t.km} · {t.department}</div>
-                    <div style={{ display: 'flex', gap: 8, marginTop: 3 }}>
-                      <span style={{ color: tl.color, fontWeight: 'bold' }}>IRT {tirt}</span>
-                      {td && <span style={{ color: '#38bdf8' }}>⚡ {td.speed} km/h</span>}
-                      {td && <span style={{ color: '#a78bfa' }}>↑ {td.flow} veh/h</span>}
-                    </div>
-                  </div>
-                </LTooltip>
-              </CircleMarker>
-            );
-          })}
           {/* ── Accident Hotspot markers ── */}
           {showAccidentLayer && accidentHotspots && accidentHotspots.map(hs => {
             const nivel = getNivelRiesgo(hs.iraScore);

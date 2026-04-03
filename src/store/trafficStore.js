@@ -2,6 +2,7 @@ import { create } from 'zustand';
 
 const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
 const WS_URL = `${protocol}//${window.location.host}/api/traffic`;
+const HTTP_URL = `${window.location.protocol}//${window.location.host}/api/traffic/snapshot`;
 
 export const useTrafficStore = create((set) => ({
   trafficData: {},
@@ -16,6 +17,8 @@ export const useTrafficStore = create((set) => ({
     if (state.isConnected || state.isConnecting || state.ws) return;
     
     set({ isConnecting: true });
+
+    // Soporte para Render / Redes Corporativas: Intentamos WS, si falla por Firewall de la Policía, hace HTTP
     const ws = new WebSocket(WS_URL);
     set({ ws });
     
@@ -32,22 +35,16 @@ export const useTrafficStore = create((set) => ({
             nationalWazeJams: payload.nationalWazeJams || state.nationalWazeJams
           }));
         }
-      } catch (e) {
-        console.error('[TrafficStore] Error parsing WS message:', e);
-      }
+      } catch (e) {}
     };
     
     ws.onclose = () => {
       set({ isConnected: false, isConnecting: false, ws: null });
-      // Reconnect after 3s
       setTimeout(() => useTrafficStore.getState().connect(), 3000);
     };
     
-    ws.onerror = () => {
-      ws.close();
-    };
+    ws.onerror = () => ws.close();
   }
 }));
 
-// Initialize connection automatically
 useTrafficStore.getState().connect();

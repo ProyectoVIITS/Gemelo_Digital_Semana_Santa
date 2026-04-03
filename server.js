@@ -43,6 +43,32 @@ app.get('/health', (req, res) => {
   });
 });
 
+// ── HTTP Fallback para Vercel (Localtunnel/WebSockets bloqueados) ──
+app.get('/api/traffic/snapshot', (req, res) => {
+  // CORS setup
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Access-Control-Allow-Headers', '*');
+  
+  try {
+    const { getStore } = require('./backend/services/trafficPoller');
+    let modeData = {};
+    try {
+      const fs = require('fs');
+      const calPath = path.join(__dirname, 'backend', 'config', 'operationCalendar.json');
+      modeData = JSON.parse(fs.readFileSync(calPath, 'utf8'));
+    } catch(e) {}
+    
+    res.json({
+      type: 'initial_snapshot',
+      data: getStore() || {},
+      calendar: modeData,
+      nationalWazeJams: []
+    });
+  } catch (err) {
+    res.status(500).json({ error: 'Backend poller not initialized yet' });
+  }
+});
+
 // ── Static files with aggressive caching for assets ──
 app.use('/static', express.static(path.join(BUILD_DIR, 'static'), {
   maxAge: '1y',

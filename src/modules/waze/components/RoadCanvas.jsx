@@ -9,18 +9,24 @@ export default function RoadCanvas({ jamLevel = 3, jamSpeed = 10, jamRatio = 1 }
 
   useEffect(() => {
     const canvas = canvasRef.current;
-    if (!canvas) return;
-    const ctx = canvas.getContext('2d');
-    let width = canvas.parentElement.clientWidth;
-    let height = canvas.parentElement.clientHeight || 280;
+    if (!canvas || !canvas.parentElement) return;
+    
+    const parent = canvas.parentElement;
+    
+    // Usar ResizeObserver para solventar el layout tardío de React Flexbox
+    let width = parent.clientWidth > 10 ? parent.clientWidth : 800;
+    let height = parent.clientHeight > 10 ? parent.clientHeight : 280;
     
     // Support High-DPI displays
-    const dpr = window.devicePixelRatio || 1;
-    canvas.width = width * dpr;
-    canvas.height = height * dpr;
-    canvas.style.width = `${width}px`;
-    canvas.style.height = `${height}px`;
-    ctx.scale(dpr, dpr);
+    let dpr = window.devicePixelRatio || 1;
+    
+    const applySize = () => {
+      canvas.width = width * dpr;
+      canvas.height = height * dpr;
+      canvas.style.width = `${width}px`;
+      canvas.style.height = `${height}px`;
+    };
+    applySize();
 
     let animationFrameId;
 
@@ -77,6 +83,15 @@ export default function RoadCanvas({ jamLevel = 3, jamSpeed = 10, jamRatio = 1 }
 
     // Lógica de Render
     const render = () => {
+      // Actializar size dinámico para Flexbox si cambia
+      if (parent.clientWidth > 10 && Math.abs(parent.clientWidth - width) > 10) {
+        width = parent.clientWidth;
+        applySize();
+      }
+
+      const ctx = canvas.getContext('2d');
+      ctx.save();
+      ctx.scale(dpr, dpr);
       ctx.clearRect(0, 0, width, height);
 
       // Fondo exterior (pasto/tierra nocturna)
@@ -243,6 +258,7 @@ export default function RoadCanvas({ jamLevel = 3, jamSpeed = 10, jamRatio = 1 }
       ctx.fillStyle = isSevere ? '#ef4444' : '#f59e0b';
       ctx.fillText(`⚡ VELOCIDAD VÍA: ${speedText}  |  🕒 EXCESO: ${ratioText}`, width - 240, 18);
 
+      ctx.restore();
       animationFrameId = requestAnimationFrame(render);
     };
 

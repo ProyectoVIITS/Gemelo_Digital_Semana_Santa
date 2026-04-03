@@ -427,63 +427,56 @@ function ColombiaMapPanel({ corridorData, onSelectCorridor, onSelectToll, showAc
             );
           })}
 
-          </MapContainer>
-        </div>
-
-        {/* ── Waze Jam markers ── */}
-        {wazeJams.map(jam => {
-          const jamCenter = jam.line?.[Math.floor((jam.line?.length || 0) / 2)];
-          if (!jamCenter) return null;
-          const isSevere = jam.jamLevel >= 4;
-          const levelColor = isSevere ? '#ef4444' : '#f59e0b';
-          
-          return (
-            <React.Fragment key={jam.uuid || jam.id}>
-              {/* Outer pulsing ring */}
-              <div className={`viits-toll-pulse ${isSevere ? 'critical' : ''}`} style={{
-                left: '50%', top: '50%', width: 0, height: 0 /* Leaflet can't overlay HTML easily inside SVG here without Marker, so we use CircleMarker glow */
-              }} />
-              <CircleMarker
-                center={[jamCenter.y, jamCenter.x]}
-                radius={isSevere ? 11 : 7}
-                pathOptions={{
-                  color: levelColor,
-                  fillColor: levelColor,
-                  fillOpacity: 0.15,
-                  weight: 1,
-                  opacity: 0.5,
-                  dashArray: '2 4'
-                }}
-              />
-              <CircleMarker
-                center={[jamCenter.y, jamCenter.x]}
-                radius={isSevere ? 4 : 3}
-                pathOptions={{
-                  color: '#fff',
-                  fillColor: levelColor,
-                  fillOpacity: 1,
-                  weight: 1.5,
-                  opacity: 1,
-                }}
-              >
-                <LTooltip direction="top" offset={[0, -8]} className="viits-toll-label">
-                  <div>
-                    <div style={{ color: levelColor, fontWeight: 'bold', fontSize: 11, marginBottom: 2 }}>
-                      {(jam.name || 'CONGESTIÓN EN TRAMO DE VÍA').toUpperCase()}
-                      {jam.leadAlert?.type === 'ACCIDENT' && ' ⚠'}
+          {/* ── Waze Jam markers ── */}
+          {wazeJams.map(jam => {
+            const jamCenter = jam.line?.[Math.floor((jam.line?.length || 0) / 2)];
+            if (!jamCenter) return null;
+            const isSevere = jam.jamLevel >= 4;
+            const levelColor = isSevere ? '#ef4444' : '#f59e0b';
+            
+            return (
+              <React.Fragment key={jam.uuid || jam.id}>
+                <CircleMarker
+                  center={[jamCenter.y, jamCenter.x]}
+                  radius={isSevere ? 11 : 7}
+                  pathOptions={{
+                    color: levelColor,
+                    fillColor: levelColor,
+                    fillOpacity: 0.15,
+                    weight: 1,
+                    opacity: 0.5,
+                    dashArray: '2 4'
+                  }}
+                />
+                <CircleMarker
+                  center={[jamCenter.y, jamCenter.x]}
+                  radius={isSevere ? 4 : 3}
+                  pathOptions={{
+                    color: '#fff',
+                    fillColor: levelColor,
+                    fillOpacity: 1,
+                    weight: 1.5,
+                    opacity: 1,
+                  }}
+                >
+                  <LTooltip direction="top" offset={[0, -8]} className="viits-toll-label">
+                    <div>
+                      <div style={{ color: levelColor, fontWeight: 'bold', fontSize: 11, marginBottom: 2 }}>
+                        {(jam.name || 'CONGESTIÓN EN TRAMO DE VÍA').toUpperCase()}
+                        {jam.leadAlert?.type === 'ACCIDENT' && ' ⚠'}
+                      </div>
+                      <div style={{ display: 'flex', gap: 6, fontSize: 9 }}>
+                        <span style={{ color: '#f59e0b' }}>Nivel {jam.jamLevel}</span>
+                        <span style={{ color: '#ef4444' }}>{Math.round(jam.time/60)} min</span>
+                        <span style={{ color: '#38bdf8' }}>{(jam.length/1000).toFixed(1)} km</span>
+                      </div>
                     </div>
-                    <div style={{ display: 'flex', gap: 6, fontSize: 9 }}>
-                      <span style={{ color: '#f59e0b' }}>Nivel {jam.jamLevel}</span>
-                      <span style={{ color: '#ef4444' }}>{Math.round(jam.time/60)} min</span>
-                      <span style={{ color: '#38bdf8' }}>{(jam.length/1000).toFixed(1)} km</span>
-                    </div>
-                  </div>
-                </LTooltip>
-              </CircleMarker>
-            </React.Fragment>
-          );
-        })}
-
+                  </LTooltip>
+                </CircleMarker>
+              </React.Fragment>
+            );
+          })}
+        </MapContainer>
       </div>
 
       {/* ── Corridor legend ── */}

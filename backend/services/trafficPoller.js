@@ -1,4 +1,6 @@
 require('dotenv').config();
+const fs = require('fs');
+const path = require('path');
 const { TOLL_SEGMENTS, ALL_STATIONS } = require('../data/nexusCorridorsData');
 
 // ── API Keys ──
@@ -14,7 +16,7 @@ const CACHE_TTL = 120000; // 2 min
 
 let wazeFeedCache = { data: null, ts: 0 };
 let wazeTvtCache = { data: null, ts: 0 };
-const WAZE_FEED_TTL = 180000; // 3 min
+const WAZE_FEED_TTL = 3600000; // 1 hora (60 min) -> Petición estricta del cliente
 
 const globalTrafficStore = {}; 
 
@@ -217,29 +219,43 @@ async function pollOneStation(stationId) {
   return fused;
 }
 
+function getTopWazeJams() {
+  return (wazeTvtCache.data || [])
+    .filter(j => j.jamLevel >= 3 && j.type !== 'STATIC')
+    .sort((a, b) => (b.jamLevel - a.jamLevel) || ((b.length || 0) - (a.length || 0)))
+    .slice(0, 10);
+}
+
 let globalRRIndex = 0;
 function startPoller(wss) {
   console.log(`[Backend-Poller] Iniciando polling para ${ALL_STATIONS.length} peajes...`);
   
   // Enviar batch de actualizaciones cada vez que cambia el store
   const broadcast = () => {
-    const topWazeJams = (wazeTvtCache.data || [])
-      .filter(j => j.jamLevel >= 3 && j.type !== 'STATIC')
-      .sort((a, b) => {
-        if (b.jamLevel !== a.jamLevel) return b.jamLevel - a.jamLevel;
-        return (b.length || 0) - (a.length || 0);
-      })
-      .slice(0, 10);
+    const topWazeJams = getTopWazeJams();
+
+    // NUEVO: Extraer todos los accidentes de Waze activos para el mapa 3D
+    const wazeAccidents = (wazeFeedCache.data || [])
+      .filter(a => (a.type || '').includes('ACCIDENT'))
+      .map(a => ({
+        id: a.uuid || Math.random().toString(36).substring(7),
+        lat: a.location?.y,
+        lng: a.location?.x,
+        type: a.subtype || a.type,
+        street: a.street,
+        confidence: a.confidence,
+        reliability: a.reliability,
+        ts: a.pubMillis || Date.now()
+      }));
 
     const payload = JSON.stringify({ 
       type: 'traffic_update', 
       data: globalTrafficStore,
-      nationalWazeJams: topWazeJams
+      nationalWazeJams: topWazeJams,
+      wazeAccidents: wazeAccidents // Inyectado para el Analizador 3D
     });
     wss.clients.forEach(c => {
-      if (c.readyState === 1 /* WebSocket.OPEN */) { 
-        c.send(payload); 
-      }
+      if (c.readyState === 1) c.send(payload); 
     });
   };
 
@@ -262,7 +278,24 @@ function startPoller(wss) {
     broadcast();
     console.log('[Backend-Poller] Primera ronda inicializada con éxito.');
   })();
+
+  // ── Snapshot Horario Automatizado (Requerimiento Usuario) ──
+  setInterval(() => {
+    const now = new Date();
+    const accidents = (wazeFeedCache.data || []).filter(a => (a.type || '').includes('ACCIDENT'));
+    const snapshotPath = path.resolve(__dirname, '../../public/data/waze_hourly_snapshot.json');
+    
+    try {
+      if (!fs.existsSync(path.dirname(snapshotPath))) fs.mkdirSync(path.dirname(snapshotPath), { recursive: true });
+      fs.writeFileSync(snapshotPath, JSON.stringify({
+        lastUpdate: now.toISOString(),
+        count: accidents.length,
+        accidents: accidents.map(a => ({ lat: a.location?.y, lng: a.location?.x, type: a.subtype || a.type, ts: a.pubMillis }))
+      }));
+      console.log(`[Waze-History] Snapshot horario generado: ${accidents.length} accidentes activos.`);
+    } catch(e) { console.error('[Waze-History] Error guardando snapshot:', e); }
+  }, 3600000); // 1 hora
 }
 
 function getStore() { return globalTrafficStore; }
-module.exports = { startPoller, getStore };
+module.exports = { startPoller, getStore, getTopWazeJams };

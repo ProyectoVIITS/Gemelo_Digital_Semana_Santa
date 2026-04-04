@@ -2,7 +2,7 @@
 const { WebSocketServer } = require('ws');
 const fs = require('fs');
 const path = require('path');
-const { startPoller, getStore } = require('./services/trafficPoller');
+const { startPoller, getStore, getTopWazeJams } = require('./services/trafficPoller');
 
 function initWebSocketServer(server) {
   const wss = new WebSocketServer({ server, path: '/api/traffic' });
@@ -19,18 +19,13 @@ function initWebSocketServer(server) {
       modeData = JSON.parse(fs.readFileSync(calPath, 'utf8'));
     } catch(e) { }
 
-    const topWazeJams = (() => {
-      try {
-        const cache = require('./services/trafficPoller');
-        return []; // In initial snapshot, it will be immediately updated by the poller tick.
-      } catch(e) { return []; }
-    })();
+    const topWazeJams = getTopWazeJams();
 
     ws.send(JSON.stringify({ 
       type: 'initial_snapshot', 
       data: getStore(),
       calendar: modeData,
-      nationalWazeJams: [] 
+      nationalWazeJams: topWazeJams 
     }));
 
     ws.on('error', console.error);

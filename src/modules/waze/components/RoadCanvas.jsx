@@ -6,6 +6,12 @@ const FPS = 60;
 
 export default function RoadCanvas({ jamLevel = 3, jamSpeed = 10, jamRatio = 1 }) {
   const canvasRef = useRef(null);
+  const carsRef = useRef([]);
+  const propsRef = useRef({ jamLevel, jamSpeed, jamRatio });
+
+  useEffect(() => {
+    propsRef.current = { jamLevel, jamSpeed, jamRatio };
+  }, [jamLevel, jamSpeed, jamRatio]);
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -55,34 +61,39 @@ export default function RoadCanvas({ jamLevel = 3, jamSpeed = 10, jamRatio = 1 }
     // Paleta de colores vehiculares más profesional/sobria
     const carColors = ['#e2e8f0', '#94a3b8', '#0f172a', '#1e293b', '#b91c1c', '#0369a1'];
 
-    // Inicializar carros ordenados por carril y posición para usar lógica de seguimiento (Car Following)
-    let cars = [];
-    for (let currentLane = 0; currentLane < lanes; currentLane++) {
-      let currentX = width + Math.random() * 50; // Empezar fuera de pantalla
-      for (let j = 0; j < carsPerLane; j++) {
-        const carLength = (4 + Math.random() * 1.5) * METERS_TO_PX; // ~4 - 5.5 metros
-        
-        currentX -= (carLength + 2 * METERS_TO_PX + (Math.random() * 15 * METERS_TO_PX)); // Gap base de 2m + random
-        // Repartir en el ancho inicial disponible
-        if(j === 0) currentX = width * Math.random();
+    // Inicializar carros ordenados por carril y posición solo si no existen
+    if (carsRef.current.length === 0) {
+      let cars = [];
+      for (let currentLane = 0; currentLane < lanes; currentLane++) {
+        let currentX = width + Math.random() * 50; // Empezar fuera de pantalla
+        for (let j = 0; j < carsPerLane; j++) {
+          const carLength = (4 + Math.random() * 1.5) * METERS_TO_PX; // ~4 - 5.5 metros
+          
+          currentX -= (carLength + 2 * METERS_TO_PX + (Math.random() * 15 * METERS_TO_PX)); // Gap base de 2m + random
+          // Repartir en el ancho inicial disponible
+          if(j === 0) currentX = width * Math.random();
 
-        cars.push({
-          lane: currentLane,
-          x: currentX,
-          y: roadTopY + (currentLane * laneHeight) + (laneHeight / 2),
-          length: carLength,
-          width: 1.8 * METERS_TO_PX, // ~1.8 metros ancho
-          color: carColors[Math.floor(Math.random() * carColors.length)],
-          targetSpeed: actualBaseSpeed * (0.9 + Math.random() * 0.2), // Pequeña variación
-          currentSpeed: 0,
-        });
+          cars.push({
+            lane: currentLane,
+            x: currentX,
+            y: roadTopY + (currentLane * laneHeight) + (laneHeight / 2),
+            length: carLength,
+            width: 1.8 * METERS_TO_PX, // ~1.8 metros ancho
+            color: carColors[Math.floor(Math.random() * carColors.length)],
+            targetSpeed: actualBaseSpeed * (0.9 + Math.random() * 0.2), // Pequeña variación
+            currentSpeed: 0,
+          });
+        }
       }
+      carsRef.current = cars;
     }
 
-    const isSevere = jamLevel >= 3 || jamRatio > 2;
+    // Update & Render Logic
+    let lastTime = performance.now();
+    let accumulator = 0;
+    const fixedDt = 1000 / 60;
 
-    // Lógica de Render
-    const render = () => {
+    const render = (timestamp) => {
       // Actializar size dinámico para Flexbox si cambia
       if (parent.clientWidth > 10 && Math.abs(parent.clientWidth - width) > 10) {
         width = parent.clientWidth;
@@ -120,8 +131,58 @@ export default function RoadCanvas({ jamLevel = 3, jamSpeed = 10, jamRatio = 1 }
       }
       ctx.setLineDash([]); 
 
-      // Brillo rojo de Alerta Severa Waze (Calor/Congestión)
-      if (isSevere) {
+      // Físicas y Renderizado Vehicular usando Fixed Timestep
+      let rawDelta = timestamp - lastTime;
+      if (rawDelta > 100) rawDelta = 100;
+      lastTime = timestamp;
+      accumulator += rawDelta;
+
+      const { jamLevel: dynJamLevel, jamSpeed: dynJamSpeed, jamRatio: dynJamRatio } = propsRef.current;
+      const dynIsSevere = dynJamLevel >= 3 || dynJamRatio > 2;
+      const dynSpeedMPS = dynJamSpeed / 3.6;
+      const dynSpeedPXS = dynSpeedMPS * METERS_TO_PX;
+      const dynBaseSpeedPxFrame = dynSpeedPXS / 60;
+      const dynActualBaseSpeed = Math.max(0.05, dynBaseSpeedPxFrame);
+
+      // Physics logic sub-stepping
+      while (accumulator >= fixedDt) {
+        for (let currentLane = 0; currentLane < lanes; currentLane++) {
+          const laneCars = carsRef.current.filter(c => c.lane === currentLane).sort((a, b) => b.x - a.x);
+          for (let i = 0; i < laneCars.length; i++) {
+            const car = laneCars[i];
+            const leader = i > 0 ? laneCars[i - 1] : null;
+
+            car.targetSpeed = dynActualBaseSpeed * (0.9 + (car.x % 0.2)); 
+            let speedToApply = car.targetSpeed;
+            car.isBraking = false;
+
+            if (leader) {
+              const distanceToLeader = leader.x - (car.x + car.length);
+              const safeDistance = 1 * METERS_TO_PX + (car.currentSpeed * 10); 
+              
+              if (distanceToLeader < safeDistance) {
+                speedToApply = leader.currentSpeed * 0.9;
+                car.isBraking = true;
+              } else if (distanceToLeader < safeDistance * 2) {
+                speedToApply = leader.currentSpeed;
+              }
+            }
+
+            car.currentSpeed += (speedToApply - car.currentSpeed) * 0.1;
+            car.x += car.currentSpeed;
+
+            if (car.x > width + 20) {
+              const lastCar = laneCars[laneCars.length - 1];
+              car.x = lastCar ? lastCar.x - (car.length + 8 * METERS_TO_PX) : -car.length;
+              car.currentSpeed = dynActualBaseSpeed;
+            }
+          }
+        }
+        accumulator -= fixedDt;
+      }
+
+      // Brillo rojo de Alerta Severa
+      if (dynIsSevere) {
         const gradient = ctx.createLinearGradient(0, roadTopY, 0, roadBottomY);
         gradient.addColorStop(0, 'rgba(239, 68, 68, 0.08)');
         gradient.addColorStop(0.5, 'rgba(239, 68, 68, 0.01)');
@@ -130,45 +191,11 @@ export default function RoadCanvas({ jamLevel = 3, jamSpeed = 10, jamRatio = 1 }
         ctx.fillRect(0, roadTopY, width, roadHeight);
       }
 
-      // Físicas y Renderizado Vehicular
       for (let currentLane = 0; currentLane < lanes; currentLane++) {
-        // Filtrar carros en este carril y ordenar por posición X (de derecha a izquierda)
-        const laneCars = cars.filter(c => c.lane === currentLane).sort((a, b) => b.x - a.x);
-        
+        const laneCars = carsRef.current.filter(c => c.lane === currentLane).sort((a, b) => b.x - a.x);
         for (let i = 0; i < laneCars.length; i++) {
           const car = laneCars[i];
-          const leader = i > 0 ? laneCars[i - 1] : null;
-
-          // Car Following Model simplificado
-          let speedToApply = car.targetSpeed;
-          let isBraking = false;
-
-          if (leader) {
-            // Distancia entre frente de este carro y cola del líder
-            const distanceToLeader = leader.x - (car.x + car.length);
-            const safeDistance = 1 * METERS_TO_PX + (car.currentSpeed * 10); // Gap dinámico seguro
-            
-            if (distanceToLeader < safeDistance) {
-              speedToApply = leader.currentSpeed * 0.9; // Frenar sutilmente debajo de la velocidad del líder
-              isBraking = true;
-            } else if (distanceToLeader < safeDistance * 2) {
-              speedToApply = leader.currentSpeed; // Igualar
-            }
-          }
-
-          // Aceleración / Desaceleración suave
-          car.currentSpeed += (speedToApply - car.currentSpeed) * 0.1;
-          
-          // Aplicar desplazamiento neto
-          car.x += car.currentSpeed;
-
-          // Reposicionar si sale del Canvas (Efecto carrusel)
-          if (car.x > width + 20) {
-            // Mandarlo al final de la cola
-            const lastCar = laneCars[laneCars.length - 1];
-            car.x = lastCar ? lastCar.x - (car.length + 8 * METERS_TO_PX) : -car.length;
-            car.currentSpeed = actualBaseSpeed;
-          }
+          const isBraking = car.isBraking || false;
 
           // ─── DIBUJAR VEHÍCULO (High Fidelity) ───
           const cy = car.y;
@@ -244,24 +271,25 @@ export default function RoadCanvas({ jamLevel = 3, jamSpeed = 10, jamRatio = 1 }
       // ─── HUD UI Overlay (Removido clearRect destructivo) ───
       // Opcionalmente un gradiente muy sutil en bordes para destacar.
       
-      // Etiquetas informativas del simulador
-      ctx.fillStyle = '#a855f7'; 
+      // Etiquetas informativas del simulador corporativo
+      ctx.fillStyle = '#14b8a6'; 
       ctx.font = "bold 9px 'JetBrains Mono', monospace";
-      ctx.fillText(`SIMULACIÓN FLUJO DENSO WAZE`, 12, 18);
+      ctx.fillText(`SINCRONIZANDO GEMELO DIGITAL`, 12, 18);
       
-      const speedText = `${Math.round(jamSpeed)} KM/H`;
-      const ratioText = `${jamRatio}x DELAY`;
-      ctx.fillStyle = isSevere ? '#ef4444' : '#f59e0b';
+      const speedText = `${Math.round(propsRef.current.jamSpeed)} KM/H`;
+      const ratioText = `${propsRef.current.jamRatio}x DELAY`;
+      
+      const dynIsSevereRender = propsRef.current.jamLevel >= 3 || propsRef.current.jamRatio > 2;
+      ctx.fillStyle = dynIsSevereRender ? '#ef4444' : '#f59e0b';
       ctx.fillText(`⚡ VELOCIDAD VÍA: ${speedText}  |  🕒 EXCESO: ${ratioText}`, width - 240, 18);
 
       ctx.restore();
       animationFrameId = requestAnimationFrame(render);
     };
 
-    render();
-
+    animationFrameId = requestAnimationFrame(render);
     return () => cancelAnimationFrame(animationFrameId);
-  }, [jamLevel, jamSpeed, jamRatio]);
+  }, []);
 
   return (
     <canvas 

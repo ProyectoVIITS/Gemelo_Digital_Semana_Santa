@@ -9,6 +9,7 @@ import TollPage from './modules/toll/TollPage';
 import WazeSegmentPage from './modules/waze/WazeSegmentPage';
 import FiscalizacionPage from './modules/fiscalizacion/FiscalizacionPage';
 import FiscalizacionTollPage from './modules/fiscalizacion/FiscalizacionTollPage';
+import AccidentAnalyzer from './pages/AccidentAnalyzer';
 
 export default function App() {
   return (
@@ -21,6 +22,8 @@ export default function App() {
         <Route path="/monitor/waze/:wazeId" element={<WazeSegmentPage />} />
         <Route path="/monitor/:corridorId" element={<CorridorPage />} />
         <Route path="/monitor/:corridorId/:tollId" element={<TollPage />} />
+        {/* Módulo Especial de Accidentología DITRA en 3D */}
+        <Route path="/monitor/inteligencia-3d" element={<AccidentAnalyzer />} />
         {/* Módulo privado — Fiscalización Autopistas del Café */}
         <Route path="/fiscalizacion" element={<FiscalizacionPage />} />
         <Route path="/fiscalizacion/:tollId" element={<FiscalizacionTollPage />} />

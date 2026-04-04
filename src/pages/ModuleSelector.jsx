@@ -1,6 +1,6 @@
 import React from 'react';
 import { Link } from 'react-router-dom';
-import { Map, Building2, Shield, Activity } from 'lucide-react';
+import { Map, Building2, Shield, Activity, ShieldAlert } from 'lucide-react';
 
 const modules = [
   {
@@ -28,6 +28,19 @@ const modules = [
     status: 'Operativo',
     statusColor: '#22c55e',
     tags: ['7 corredores', '37 peajes', '7 escenarios', 'Simulador'],
+  },
+  {
+    title: 'Inteligencia de Accidentabilidad 3D',
+    subtitle: 'Análisis Geoespacial Predictivo — DITRA Expert',
+    description: 'Visualizador de alto rendimiento basado en Deck.gl. Análisis de zonas negras, filtros vehiculares y torres de riesgo en 3D.',
+    path: '/monitor/inteligencia-3d',
+    icon: ShieldAlert,
+    accent: '#ef4444',
+    accentBg: 'rgba(239, 68, 68, 0.08)',
+    accentBorder: 'rgba(239, 68, 68, 0.25)',
+    status: 'Nuevo Módulo',
+    statusColor: '#0ea5e9',
+    tags: ['Deck.gl 3D', 'Data DITRA', 'Análisis Experto', 'GPU Render'],
   },
 ];
 

@@ -198,9 +198,9 @@ export default function TollCanvas({
   const animRef = useRef(null);
   const sizeRef = useRef({ w: 800, h: CANVAS_H });
   const flashRef = useRef([]);
-  const dataRef = useRef({ lanes, metrics });
+  const dataRef = useRef({ lanes, metrics, direction, realTraffic });
 
-  useEffect(() => { dataRef.current = { lanes, metrics, direction }; }, [lanes, metrics, direction]);
+  useEffect(() => { dataRef.current = { lanes, metrics, direction, realTraffic }; }, [lanes, metrics, direction, realTraffic]);
 
   const draw = useCallback((ctx, timestamp) => {
     const { w, h } = sizeRef.current;
@@ -621,7 +621,7 @@ export default function TollCanvas({
 
   const update = useCallback((timestamp, deltaMs) => {
     const { w, h } = sizeRef.current;
-    const { lanes: currentLanes, metrics: currentMetrics } = dataRef.current;
+    const { lanes: currentLanes, metrics: currentMetrics, realTraffic: rtCurrent } = dataRef.current;
     const roadTop = h * ROAD_Y_START;
     const roadBot = h * ROAD_Y_END;
     const numLanes = (currentLanes || []).length || 4;
@@ -653,7 +653,7 @@ export default function TollCanvas({
     const _isNight = _hour >= 20 || _hour <= 5;
     const _isGridlock = _isRetorno && _retScale >= 0.75 && _hour >= 13 && _hour <= 20;
     // ── REAL TRAFFIC from Google Routes API ──
-    const _rt = realTraffic;
+    const _rt = rtCurrent;
     const _hasRealTraffic = !!(_rt && _rt.currentSpeed != null);
 
     const _isPlenoFrame = _opMode.exodoLevel === 'pleno';
@@ -1001,16 +1001,7 @@ export default function TollCanvas({
       const boothX = gantryX - BOOTH_W / 2;
       const MIN_GAP = catDef.width + 8; // minimum gap between vehicles (solid, no overlap)
 
-      // ── Anti-freeze: detect stuck vehicles ──
-      // Solo forzar departing si el vehículo está genuinamente trabado, NO si está en cola
-      const prevX = v._prevX || v.x;
-      if (Math.abs(v.x - prevX) < 0.3 && v.state !== 'at-booth' && v.state !== 'queued') {
-        v.stuckTimer = (v.stuckTimer || 0) + dt;
-        if (v.stuckTimer > 8) { v.state = 'departing'; v.speed = 25; v.stuckTimer = 0; }
-      } else {
-        v.stuckTimer = 0;
-      }
-      v._prevX = v.x;
+      // ── Anti-freeze inestable ELIMINADO — Provocaba saltos bruscos cada 8s en flujo denso ──
 
       const laneQueue = lane ? lane.queue : 0;
       const effectiveQueue = isPeakHour ? laneQueue : Math.min(laneQueue, 1);
@@ -1078,12 +1069,12 @@ export default function TollCanvas({
             // Nada adelante — avanzar a la caseta
             v.state = 'approaching';
             v.speed = 15;
-          } else if (gapToAhead > MIN_GAP + 4) {
-            // Creep forward — avance lento manteniendo gap seguro
-            const creepSpeed = Math.min(10, (gapToAhead - MIN_GAP) * 1.5);
+          } else if (gapToAhead > MIN_GAP + 0.5) {
+            // Avance sedoso sin saltos de 4 pixeles:
+            const creepSpeed = Math.max(2, Math.min(18, (gapToAhead - MIN_GAP) * 2.5));
             v.x += creepSpeed * dt;
           }
-          // Gap <= MIN_GAP+4: quedarse quieto, cola formada correctamente
+          // Si Gap <= MIN_GAP+0.5: mantenerse estable para evitar micro-rebotes
           break;
         }
         case 'at-booth':
@@ -1121,16 +1112,20 @@ export default function TollCanvas({
             }
             const postGap = nextAheadX - v.x;
 
-            if (postGap < MIN_GAP * 1.5) {
+            if (postGap <= MIN_GAP * 1.05) {
+              // Taponamiento severo, stop firme sin tocar al de enfrente
               v.speed = 0;
-            } else if (v.x >= stopZone) {
-              v.speed = Math.max(v.speed - 30 * dt, 0);
-              if (v.speed > 0.5) v.x += v.speed * dt;
+              v.x = nextAheadX - (MIN_GAP * 1.05); // Snap microscópico y blindado para no penetrar
+            } else if (postGap > MIN_GAP * 1.05 && v.x >= stopZone) {
+              // Avance de arrastre tipo acordeón real en cola post-peaje
+              const accordionSpeed = Math.min(10, Math.max(1, (postGap - MIN_GAP) * 2));
+              v.speed = accordionSpeed;
+              v.x += v.speed * dt;
             } else {
-              const distToStop = stopZone - v.x;
+              const distToStop = Math.max(0, stopZone - v.x);
               const brakeFactor = Math.min(distToStop / 80, 1);
-              const maxSpeed = _isPlenoColapso ? 5 + brakeFactor * 6 : 8 + brakeFactor * 12;
-              v.speed = Math.min(v.speed + 3 * dt, maxSpeed);
+              const maxSpeed = _isPlenoColapso ? 6 + brakeFactor * 6 : 8 + brakeFactor * 12;
+              v.speed = Math.min(v.speed + 3 * dt, maxSpeed); // acelera o mantiene suave
               v.x += v.speed * dt;
             }
           } else {
@@ -1174,20 +1169,33 @@ export default function TollCanvas({
     });
     observer.observe(canvas.parentElement);
 
-    // ── Animation loop: cap delta to prevent burst after tab-switch ──
-    // When browser tab is in background, rAF is paused. On return, delta could be
-    // thousands of ms → burst spawn + teleport vehicles. Cap delta to 50ms (20fps min).
-    // Also use document.visibilityState to handle tab unfocus gracefully.
+    // ── Animation fixed timestep para hiper-suavidad y eliminación de stutter ──
+    let accumulator = 0;
+    const fixedDt = 1000 / 60; // 16.66ms per logic tick
+    
     function loop(timestamp) {
-      // Cap delta: if tab was backgrounded, delta can be huge → clamp to 50ms
-      const rawDelta = timestamp - lastTime;
-      const delta = Math.min(rawDelta, 50);
+      if (!lastTime) lastTime = timestamp;
+      
+      let rawDelta = timestamp - lastTime;
+      // Cap gigantic deltas from backgrounding (max approx 6 frames)
+      if (rawDelta > 100) rawDelta = 100;
       lastTime = timestamp;
-
+      
+      accumulator += rawDelta;
+      
       const dpr = window.devicePixelRatio || 1;
       ctx.save();
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-      update(timestamp, delta);
+
+      // Perform physics updates in perfectly stable sub-steps
+      let steps = 0;
+      while (accumulator >= fixedDt && steps < 10) {
+        update(timestamp, fixedDt);
+        accumulator -= fixedDt;
+        steps++;
+      }
+      
+      // Draw exclusively once using exact mathematically updated positions
       draw(ctx, timestamp);
       ctx.restore();
 

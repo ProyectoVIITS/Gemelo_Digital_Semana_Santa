@@ -5,7 +5,7 @@
 import React, { useState, useCallback, useEffect, useMemo, useRef } from 'react';
 import { Link } from 'react-router-dom';
 import { MapContainer, TileLayer, Polyline, CircleMarker, Tooltip as LTooltip, useMap } from 'react-leaflet';
-import { ArrowLeft, Shield, Wifi, Activity, AlertTriangle, Gauge, ChevronRight, Radio, TrendingUp, Car, BarChart2 } from 'lucide-react';
+import { ArrowLeft, Shield, Wifi, Activity, AlertTriangle, Gauge, ChevronRight, Radio, TrendingUp, Car, BarChart2, ShieldAlert } from 'lucide-react';
 import { LineChart, Line, AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import { NEXUS_CORRIDORS, getIRTLevel, TOTAL_TOLL_STATIONS, CORRIDOR_COLORS } from '../../data/nexusCorridors';
 import { getOperationMode, getColombiaHour } from '../../utils/operationMode';
@@ -80,6 +80,13 @@ function MonitorHeader({ globalMetrics, clock }) {
       </div>
 
       <div className="flex items-center gap-4">
+        {/* Enlace al Nuevo Módulo 3D de Accidentología */}
+        <Link to="/monitor/inteligencia-3d" 
+              className="flex items-center gap-1.5 px-2 py-1 rounded border border-red-500/30 bg-red-500/10 hover:bg-red-500/20 text-red-400 transition-all hover:scale-105 group">
+          <ShieldAlert className="w-3.5 h-3.5 group-hover:animate-pulse" />
+          <span className="text-[10px] font-bold tracking-tight">INTELIGENCIA 3D</span>
+        </Link>
+
         <span className="text-sm tabular-nums text-slate-300" style={{ fontFamily: 'JetBrains Mono, Space Mono, monospace' }}>
           {clock.toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit', second: '2-digit', timeZone: 'America/Bogota' })}
         </span>
@@ -699,7 +706,7 @@ function AlertaDITRA({ corridorData }) {
             <div className="px-2 py-0.5 rounded text-[8px] tracking-widest font-bold bg-white/10 text-white/90">LIVE</div>
           </div>
           <div className="text-[10px] text-slate-400 tracking-wide mt-0.5 font-mono">
-            Radar Global Waze TVT · Datos Sincronizados · Top Nacional ({wazeJams.length} incidentes críticos)
+            Radar Inteligente Gemelo Digital - Ministerio de Transporte · Datos Sincronizados · Top Nacional ({wazeJams.length} incidentes críticos)
           </div>
         </div>
       </div>
@@ -723,7 +730,7 @@ function AlertaDITRA({ corridorData }) {
         </div>
       </div>
 
-      {/* Top 10 jams Waze */}
+      {/* Top 10 jams Gemelo Digital */}
       <div className="relative z-10">
         <div className="flex items-center justify-between mb-2">
           <div className="text-[9px] uppercase tracking-[0.15em] text-slate-500">
@@ -782,9 +789,9 @@ function AlertaDITRA({ corridorData }) {
                     {isClosed && <span className="ml-1.5 px-1.5 py-0.5 rounded-sm bg-red-900/40 text-red-500 text-[8px] uppercase tracking-widest border border-red-500/30 font-bold">🚫 CERRADO</span>}
                   </div>
                   <div className="flex items-center mt-1 flex-wrap gap-1.5">
-                    <span className="px-1 py-0.5 rounded text-[8px] font-mono font-bold border border-purple-500/30" style={{
-                       background: 'linear-gradient(45deg, rgba(168,85,247,0.2), rgba(168,85,247,0.05))', color: '#c084fc'
-                    }}>WAZE LIVE</span>
+                    <span className="px-1 py-0.5 rounded text-[8px] font-mono font-bold border border-teal-500/30" style={{
+                       background: 'linear-gradient(45deg, rgba(20,184,166,0.2), rgba(20,184,166,0.05))', color: '#2dd4bf'
+                    }}>GEMELO DIGITAL LIVE</span>
                     <span className="text-[9px] text-slate-400">Punto Geográfico Exacto DITRA</span>
                   </div>
                 </div>

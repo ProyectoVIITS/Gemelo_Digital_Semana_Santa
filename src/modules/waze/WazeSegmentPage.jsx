@@ -1,5 +1,5 @@
 /**
- * WazeSegmentPage — Simulación visual de tramos congestionados Waze
+ * WazeSegmentPage — Gemelo Digital de tramos congestionados
  * Replica la estructura de TollPage pero con datos Waze TVT en tiempo real
  */
 import React, { useState, useEffect, useRef } from 'react';
@@ -42,7 +42,7 @@ export default function WazeSegmentPage() {
       <div className="min-h-screen bg-viits-bg flex items-center justify-center">
         <div className="text-center">
           <Radio className="w-8 h-8 text-purple-400 animate-pulse mx-auto mb-3" />
-          <div className="text-sm text-slate-400 font-mono">Sincronizando con Waze Global...</div>
+          <div className="text-sm text-slate-400 font-mono">Sincronizando con Gemelo Digital Global...</div>
         </div>
       </div>
     );
@@ -82,12 +82,12 @@ export default function WazeSegmentPage() {
           </Link>
           <div className="w-px h-6 bg-slate-700" />
           <div className="w-8 h-8 rounded flex items-center justify-center"
-            style={{ background: 'linear-gradient(135deg, #a855f7, #7c3aed)' }}>
-            <Radio className="w-4 h-4 text-white" />
+            style={{ background: 'linear-gradient(135deg, #14b8a6, #0d9488)' }}>
+            <Activity className="w-4 h-4 text-white" />
           </div>
           <div>
-            <span className="text-sm font-bold tracking-wide text-purple-400" style={{ fontFamily: 'JetBrains Mono, monospace' }}>
-              {jam.name || `Tramo Waze #${wazeId}`}
+            <span className="text-sm font-bold tracking-wide text-teal-400" style={{ fontFamily: 'JetBrains Mono, monospace' }}>
+              {jam.name || `Tramo Gemelo Digital #${wazeId}`}
             </span>
           </div>
           <span className="text-[7px] font-mono font-bold px-1.5 py-0.5 rounded" style={{
@@ -104,8 +104,8 @@ export default function WazeSegmentPage() {
             {clock.toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit', second: '2-digit', timeZone: 'America/Bogota' })}
           </span>
           <div className="flex items-center gap-1.5">
-            <div className="w-2 h-2 rounded-full bg-purple-500 animate-pulse" />
-            <span className="text-[10px] font-mono text-purple-400 uppercase tracking-wider">WAZE LIVE</span>
+            <div className="w-2 h-2 rounded-full bg-teal-500 animate-pulse" />
+            <span className="text-[10px] font-mono text-teal-400 uppercase tracking-wider">GEMELO DIGITAL LIVE</span>
           </div>
         </div>
       </header>
@@ -114,7 +114,7 @@ export default function WazeSegmentPage() {
       <div className="text-[9px] text-slate-600 px-4 py-1" style={{ backgroundColor: 'rgba(6, 17, 30, 0.5)' }}>
         <Link to="/monitor" className="hover:text-slate-400">Monitor Global</Link>
         <span className="mx-1">/</span>
-        <span className="text-purple-400">Waze — {jam.name}</span>
+        <span className="text-teal-400">Gemelo Digital — {jam.name}</span>
       </div>
 
       <main className="max-w-[1600px] mx-auto px-3 py-3">
@@ -153,8 +153,8 @@ export default function WazeSegmentPage() {
 
             {/* Mapa Interactivo Oscuro (Leaflet) */}
             <div className="rounded-lg border overflow-hidden relative" style={{ ...CARD, height: 320 }}>
-              <div className="absolute top-2 right-2 z-50 px-2 py-1 bg-black/60 rounded border border-purple-500/30 text-[9px] text-purple-300 font-mono flex items-center md:hidden">
-                <Radio className="w-3 h-3 mr-1" /> Satélite Radar Waze
+              <div className="absolute top-2 right-2 z-50 px-2 py-1 bg-black/60 rounded border border-teal-500/30 text-[9px] text-teal-300 font-mono flex items-center md:hidden">
+                <Radio className="w-3 h-3 mr-1" /> Satélite Radar Gemelo
               </div>
               <MapContainer 
                 center={[mapLat, mapLng]} 
@@ -195,21 +195,21 @@ export default function WazeSegmentPage() {
 
             {/* Speed History Chart */}
             <div className="rounded-lg border p-3" style={CARD}>
-              <div className="text-[10px] uppercase tracking-wider text-slate-500 mb-2">Velocidad — Tiempo Real Waze</div>
+              <div className="text-[10px] uppercase tracking-wider text-slate-500 mb-2">Velocidad — Tiempo Real Gemelo Digital</div>
               <div style={{ height: 160 }}>
                 <ResponsiveContainer width="100%" height="100%">
                   <AreaChart data={data.speedHistory}>
                     <defs>
                       <linearGradient id="wazeSpeedGrad" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="5%" stopColor="#a855f7" stopOpacity={0.3} />
-                        <stop offset="95%" stopColor="#a855f7" stopOpacity={0} />
+                        <stop offset="5%" stopColor="#14b8a6" stopOpacity={0.3} />
+                        <stop offset="95%" stopColor="#14b8a6" stopOpacity={0} />
                       </linearGradient>
                     </defs>
                     <CartesianGrid strokeDasharray="3 3" stroke="#1a2d4a" />
                     <XAxis dataKey="time" tick={{ fill: '#475569', fontSize: 8, fontFamily: 'JetBrains Mono' }} />
                     <YAxis tick={{ fill: '#475569', fontSize: 8, fontFamily: 'JetBrains Mono' }} domain={[0, 'auto']} />
                     <Tooltip contentStyle={{ backgroundColor: '#0d1a2e', border: '1px solid #1a2d4a', borderRadius: 6, fontSize: 10 }} />
-                    <Area type="monotone" dataKey="avgSpeed" stroke="#a855f7" fill="url(#wazeSpeedGrad)" strokeWidth={2} name="Velocidad" />
+                    <Area type="monotone" dataKey="avgSpeed" stroke="#14b8a6" fill="url(#wazeSpeedGrad)" strokeWidth={2} name="Velocidad" />
                     <Area type="monotone" dataKey="limit" stroke="#334155" strokeDasharray="4 4" fill="none" strokeWidth={1} name="Límite" />
                   </AreaChart>
                 </ResponsiveContainer>
@@ -231,9 +231,9 @@ export default function WazeSegmentPage() {
               <div className="flex items-center justify-between px-3 py-2 border-b" style={{ borderColor: '#1a2d4a', backgroundColor: '#06111e' }}>
                 <div className="flex items-center gap-2">
                   <span className="text-[10px] uppercase tracking-wider text-slate-500">Módulo Flujo Denso</span>
-                  <span className="px-1.5 py-0.5 rounded text-[8px] font-mono bg-purple-500/15 text-purple-400">TVT WAZE REALTIME</span>
+                  <span className="px-1.5 py-0.5 rounded text-[8px] font-mono bg-teal-500/15 text-teal-400">TVT GEMELO REALTIME</span>
                 </div>
-                <span className="text-[10px] font-mono text-slate-600">Simulador</span>
+                <span className="text-[10px] font-mono text-slate-600">Sincronización Continua</span>
               </div>
               <div style={{ height: 260, width: '100%', position: 'relative' }}>
                  <RoadCanvas 
@@ -291,7 +291,7 @@ export default function WazeSegmentPage() {
             {/* Alerts */}
             {data.alerts.length > 0 && (
               <div className="rounded-lg border p-3" style={CARD}>
-                <div className="text-[10px] uppercase tracking-wider text-slate-500 mb-2">Alertas Waze</div>
+                <div className="text-[10px] uppercase tracking-wider text-slate-500 mb-2">Alertas Gemelo Digital</div>
                 <div className="space-y-1">
                   {data.alerts.map(a => (
                     <div key={a.id} className="flex items-center gap-2 rounded px-2 py-1.5 border text-[10px]" style={{
@@ -316,12 +316,12 @@ export default function WazeSegmentPage() {
       <footer className="fixed bottom-0 left-0 right-0 h-8 flex items-center justify-between px-4 border-t text-[9px] font-mono z-30"
         style={{ backgroundColor: 'rgba(10, 15, 30, 0.95)', borderColor: '#1a2d4a' }}>
         <div className="flex items-center gap-3">
-          <span className="text-purple-400">WAZE</span>
+          <span className="text-teal-400">GEMELO DIGITAL</span>
           <span className="text-slate-600">·</span>
-          <span className="text-slate-500">DITRA · INVÍAS · MinTransporte</span>
+          <span className="text-slate-500">MINISTERIO DE TRANSPORTE · DITRA · INVÍAS</span>
         </div>
         <div className="flex items-center gap-3">
-          <span className="text-slate-500">DATOS WAZE EN TIEMPO REAL</span>
+          <span className="text-slate-500">DATOS GEMELO DIGITAL EN TIEMPO REAL</span>
           <span className="text-slate-600">·</span>
           <span className="text-slate-400">
             {clock.toLocaleDateString('es-CO', { timeZone: 'America/Bogota' })},{' '}

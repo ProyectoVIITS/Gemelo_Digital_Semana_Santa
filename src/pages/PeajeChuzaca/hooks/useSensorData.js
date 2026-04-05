@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { LANE_CONFIG, CATEGORY_WEIGHTS } from '../lib/constants';
 import { randomBetween, generatePlate, clamp } from '../lib/utils';
+import { getOperationMode } from '../../../utils/operationMode';
 
 function pickCategory() {
   const r = Math.random();
@@ -66,23 +67,33 @@ export default function useSensorData() {
       tickRef.current += 1;
       const t = tickRef.current;
 
+      const opMode = getOperationMode();
+      const isRetorno = opMode.isRetorno;
+
       // Update lanes
       const lanes = prev.lanes.map(lane => {
         if (lane.status === 'closed') {
           // 0.5% chance to reopen
           if (Math.random() < 0.005) {
-            return { ...lane, status: 'active', speed: randomBetween(50, 70), queue: 0 };
+            return { ...lane, status: 'active', speed: isRetorno ? randomBetween(5, 15) : randomBetween(50, 70), queue: isRetorno ? 10 : 0 };
           }
           return { ...lane };
         }
 
         // Speed variation — correlated with time
         const speedDelta = randomBetween(-8, 8);
-        const newSpeed = clamp(Math.round(lane.speed + speedDelta), 25, 105);
+        const baseMinSpeed = isRetorno ? 5 : 25;
+        const baseMaxSpeed = isRetorno ? 20 : 105;
+        let newSpeed = clamp(Math.round(lane.speed + speedDelta), baseMinSpeed, baseMaxSpeed);
+        
+        // Forzar la baja de velocidad gradualmente si acaba de cambiar de modo
+        if (isRetorno && newSpeed > 30) newSpeed -= 5; 
 
-        // Queue inversely correlated with speed
-        const queuePressure = newSpeed < 50 ? 3 : newSpeed < 65 ? 1 : -1;
-        const newQueue = clamp(lane.queue + Math.round(queuePressure + randomBetween(-1, 1)), 0, 15);
+        // Queue inversely correlated with speed, pero forzada en Retorno
+        const queuePressure = isRetorno ? randomBetween(0, 3) : (newSpeed < 50 ? 3 : newSpeed < 65 ? 1 : -1);
+        const minQueue = isRetorno ? Math.floor(randomBetween(5, 12)) : 0;
+        const maxQueue = isRetorno ? 35 : 15;
+        const newQueue = clamp(lane.queue + Math.round(queuePressure + randomBetween(-1, 1)), minQueue, maxQueue);
 
         // Transactions increment
         const txInc = lane.type === 'FacilPass' ? Math.floor(randomBetween(2, 6)) : Math.floor(randomBetween(1, 3));
@@ -111,9 +122,10 @@ export default function useSensorData() {
         ? Math.round(activeLanes.reduce((s, l) => s + l.speed, 0) / activeLanes.length)
         : 0;
       const totalQueue = lanes.reduce((s, l) => s + l.queue, 0);
-      const hourFlow = Math.round(randomBetween(180, 520));
-      const totalInc = Math.floor(randomBetween(3, 8));
-      const occupancy = clamp(Math.round(40 + (100 - avgSpeed) * 0.6 + randomBetween(-5, 5)), 15, 95);
+      
+      const hourFlow = isRetorno ? Math.round(randomBetween(1200, 2400)) : Math.round(randomBetween(180, 520));
+      const totalInc = isRetorno ? Math.floor(randomBetween(15, 30)) : Math.floor(randomBetween(3, 8));
+      const occupancy = isRetorno ? clamp(Math.round(85 + randomBetween(-3, 10)), 80, 99) : clamp(Math.round(40 + (100 - avgSpeed) * 0.6 + randomBetween(-5, 5)), 15, 95);
 
       const flow = {
         vehiclesTotal: prev.flow.vehiclesTotal + totalInc,

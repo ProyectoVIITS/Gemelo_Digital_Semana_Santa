@@ -678,9 +678,12 @@ export default function TollCanvas({
     if (activeLanes.length > 0) {
       const rawFlow = (currentMetrics.vehiclesHour || 60) / 3600;
       const gridlockSalida = _isGridlock;
-      // ── Spawn rate basado en datos reales ──
+      // ── Spawn rate basado en datos reales (Salida) ──
       let effectiveFlow;
-      if (_isPlenoColapso) {
+      if (_isRetorno) {
+        // En plan retorno, el carril de salida (Bogotá → Afuera) fluye libremente y con bajo volumen
+        effectiveFlow = isMini ? 0.04 : 0.08;
+      } else if (_isPlenoColapso) {
         effectiveFlow = isMini ? 1.5 : 4.0;
       } else if (_realCongestion > 0.6) {
         // APIs dicen congestión alta → spawn elevado
@@ -710,7 +713,10 @@ export default function TollCanvas({
         const vehHour = currentMetrics.vehiclesHour || 100;
         const flowRatio = Math.min(vehHour / 600, 1);
         let approachSpeedBase, approachSpeedVar;
-        if (_isPlenoColapso) {
+        if (_isRetorno) {
+          approachSpeedBase = 50 + flowRatio * 20; // Libre
+          approachSpeedVar = 10;
+        } else if (_isPlenoColapso) {
           approachSpeedBase = 12 + flowRatio * 8;
           approachSpeedVar = 4 + flowRatio * 4;
         } else if (_realCongestion > 0.6) {
@@ -721,7 +727,7 @@ export default function TollCanvas({
           approachSpeedBase = 30 + flowRatio * 25;
           approachSpeedVar = 8 + flowRatio * 12;
         }
-        if (_hasRealTraffic) {
+        if (_hasRealTraffic && !_isRetorno) { // Solo castigar por tráfico si NO es retorno (porque afecta carros de salida)
           approachSpeedBase = approachSpeedBase * _realSpeedFactor;
           approachSpeedVar = approachSpeedVar * _realSpeedFactor;
         }
@@ -827,17 +833,17 @@ export default function TollCanvas({
     if (retornoLanes.length > 0) {
       const gridlockActive = _isGridlock;
 
-      // Flujo de retorno: en gridlock, spawn MASIVO para saturar la vía
-      const retornoFlow = gridlockActive
-        ? 1.5 + retornoLanes.length * 0.2  // GRIDLOCK: ~3.1 veh/s para 8 carriles → satura en 10s
+      // Flujo de retorno: en gridlock o congestión confirmada por API, spawn MASIVO para saturar la vía
+      const retornoFlow = (gridlockActive || (_isRetorno && _realCongestion > 0.6) || (_isRetorno && _isPlenoColapso))
+        ? 1.5 + retornoLanes.length * 0.4  // GRIDLOCK RETORNO: Saturación brutal en der→izq
         : _isRetorno
         ? Math.max(0.3, _retScale * 0.6)
         : 0.04;  // Salida: mínimo
       counterAccRef.current += retornoFlow * dt;
 
       // Vehículos máximos: gridlock = 5 por carril retorno (vía SATURADA como foto campo)
-      const MAX_RETORNO_VEH = gridlockActive
-        ? (isMini ? 20 : retornoLanes.length * 5)  // 8 carriles × 5 = 40 vehículos
+      const MAX_RETORNO_VEH = (gridlockActive || (_isRetorno && _realCongestion > 0.6))
+        ? (isMini ? 20 : retornoLanes.length * 6)  // 8 carriles × 6 = 48 vehículos
         : _isRetorno
         ? (_isNight ? 4 : (isMini ? 8 : 18))
         : (_isNight ? 2 : (isMini ? 3 : 5));
@@ -892,9 +898,9 @@ export default function TollCanvas({
       }
       counterAccRef.current = Math.min(counterAccRef.current, 3);
 
-      // ── GRIDLOCK REFILL: garantizar mínimo 5 vehículos por carril retorno ──
-      if (gridlockActive) {
-        const MIN_PER_LANE = 5;
+      // ── GRIDLOCK REFILL: garantizar mínimo 6 vehículos por carril retorno ──
+      if (gridlockActive || (_isRetorno && _realCongestion > 0.6)) {
+        const MIN_PER_LANE = 6;
         for (const rl of retornoLanes) {
           const inLane = vehicles.filter(v => v.isCounter && !v.isMoto && v.lane === rl).length;
           if (inLane < MIN_PER_LANE && vehicles.length < MAX_RETORNO_VEH + 20) {
@@ -905,12 +911,20 @@ export default function TollCanvas({
               // Más buses en retorno (C2 = bus intermunicipal)
               if (Math.random() < 0.25) fcat = 'C2';
               const fcatDef = VEHICLE_CATEGORIES[fcat];
+              
+              // Apply real slow speed to filled queue
+              let refillSpeed = 18 + Math.random() * 15;
+              if (_hasRealTraffic && _realCongestion > 0.6) {
+                 refillSpeed = Math.max(6, _rt.currentSpeed * 1.5) + Math.random() * 5;
+              }
+              
               vehicles.push({
                 x: w + fcatDef.width + 20 + fi * 60 + Math.random() * 30,
                 lane: rl,
                 category: fcat,
-                speed: 18 + Math.random() * 15, // 18-33 px/s — lento pero avanza
-                state: 'departing',
+                speed: refillSpeed, // speed depends on traffic
+                state: 'departing', // Der->Izq
+
                 waitTimer: 0,
                 passedCount: false,
                 isMoto: false,

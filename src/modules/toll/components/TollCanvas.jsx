@@ -870,6 +870,12 @@ export default function TollCanvas({
         const chosenLane = retornoLanes[window._retornoRR % retornoLanes.length];
         window._retornoRR++;
 
+        // Asegurar que la zona de spawn de retorno esté libre antes de inyectar
+        const spawnZoneClear = !vehicles.some(ov =>
+          !ov.isMoto && ov.isCounter && ov.lane === chosenLane && ov.x > w - 80
+        );
+        if (!spawnZoneClear) { counterAccRef.current += 0.5; break; } // Esperar al siguiente frame
+
         // Velocidad de retorno en px/s (NO km/h)
         // Gridlock: lento pero visible (15-30 px/s ≈ avanza, frena en caseta)
         // Normal: 40-70 px/s
@@ -907,43 +913,6 @@ export default function TollCanvas({
       }
       counterAccRef.current = Math.min(counterAccRef.current, 3);
 
-      // ── GRIDLOCK REFILL: garantizar mínimo de vehículos si la congestión lo pide ──
-      if ((_hasRealTraffic && _realCongestion > 0.8) || (!_hasRealTraffic && gridlockActive)) {
-        const MIN_PER_LANE = 6;
-        for (const rl of retornoLanes) {
-          const inLane = vehicles.filter(v => v.isCounter && !v.isMoto && v.lane === rl).length;
-          if (inLane < MIN_PER_LANE && vehicles.length < MAX_RETORNO_VEH + 20) {
-            const needed = MIN_PER_LANE - inLane;
-            for (let fi = 0; fi < needed; fi++) {
-              let fcat = pickCategory();
-              if (VEHICLE_CATEGORIES[fcat]?.isMoto) fcat = 'C1';
-              // Más buses en retorno (C2 = bus intermunicipal)
-              if (Math.random() < 0.25) fcat = 'C2';
-              const fcatDef = VEHICLE_CATEGORIES[fcat];
-              
-              // Apply real slow speed to filled queue
-              let refillSpeed = 18 + Math.random() * 15;
-              if (_hasRealTraffic && _realCongestion > 0.6) {
-                 refillSpeed = Math.max(6, _rt.currentSpeed * 1.5) + Math.random() * 5;
-              }
-              
-              vehicles.push({
-                x: w + fcatDef.width + 20 + fi * 60 + Math.random() * 30,
-                lane: rl,
-                category: fcat,
-                speed: refillSpeed, // speed depends on traffic
-                state: 'departing', // Der->Izq
-
-                waitTimer: 0,
-                passedCount: false,
-                isMoto: false,
-                isCounter: true,
-                stuckTimer: 0,
-              });
-            }
-          }
-        }
-      }
     }
 
     // ── Helper: find nearest vehicle ahead in same lane ──

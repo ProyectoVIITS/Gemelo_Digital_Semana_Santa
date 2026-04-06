@@ -184,19 +184,23 @@ function buildSnapshot(irt, stationId, realTraffic = null) {
   }
   const c4closed = (irt * timeContextMultiplier) > 82;
 
-  // ── FLUJO / HORA REALISTA CINEMÁTICO (Q = K * V) ──
-  // Si tenemos ocupación y velocidad realista (de API Google o estimada),
-  // el flujo debe respetar el diagrama fundamental del tráfico.
-  const densityK = occup * 1.6; // veh / km
-  let cinematiqFlow = Math.round(densityK * speed);
+  // Limites realistas para la infraestructura colombiana
+  const maxCapacity = 2400; // Máximo teórico por hora Colombia
+
+  // ── FLUJO / HORA REALISTA CINEMÁTICO (Greenshields Model) ──
+  // Si no hay API, respetamos el diagrama fundamental del tráfico: 
+  // Flujo (Q) es máximo al ~50% de ocupación, y cae dramáticamente al acercarse al 100% (gridlock).
+  const occupRatio = occup / 100;
+  // Parábola: Q = Qmax * 4 * (K/Kmax) * (1 - K/Kmax)
+  let cinematiqFlow = Math.round(maxCapacity * 4 * occupRatio * (1 - occupRatio));
   
+  // En caso de que speed dicte velocidades menores, asegurar consistencia
+  if (occup > 80) cinematiqFlow = Math.round(cinematiqFlow * (speed / 30));
   // En horas súper valle (ej. 1AM, 2AM), el flow debe ser hiper bajo, no solo bajo por densidad.
   if (hourFactor < 0.1) {
      cinematiqFlow *= hourFactor * 5; // Aún más castigo en la madrugada
   }
   
-  // Limites realistas para la infraestructura colombiana
-  const maxCapacity = 2400; // Máximo teórico por hora Colombia
   cinematiqFlow = clamp(cinematiqFlow, 6, maxCapacity);
 
   // ── Acumulador de Vehículos Hoy ──

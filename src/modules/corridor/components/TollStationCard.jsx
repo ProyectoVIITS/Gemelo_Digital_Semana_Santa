@@ -8,10 +8,13 @@ import { ChevronRight, AlertTriangle } from 'lucide-react';
 import useTollData from '../../toll/hooks/useTollData';
 import TollCanvas from '../../toll/components/TollCanvas';
 import { getOperationMode } from '../../../utils/operationMode';
+import { useTrafficAPI } from '../../../hooks/useTrafficAPI';
 
 export default function TollStationCard({ corridor, toll }) {
-  // ★ Cada tarjeta tiene su propio hook — datos independientes por peaje
-  const data = useTollData(toll.id, corridor.id);
+  // ★ API-Driven 24/7 en las tarjetas pequeñas:
+  const { traffic } = useTrafficAPI(toll.id);
+  // ★ Cada tarjeta tiene su propio hook — inyectamos la data pasiva
+  const data = useTollData(toll.id, corridor.id, traffic);
   const irt = data.metrics.irt || 0;
   const irtColor = irt > 75 ? '#ef4444' : irt > 55 ? '#f59e0b' : irt > 30 ? '#84cc16' : '#22c55e';
 

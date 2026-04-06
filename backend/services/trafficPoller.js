@@ -180,8 +180,11 @@ function fuseTrafficData(google, tomtom, here, wazeFeed, wazeTvt) {
   const hasRoadClosure = here?.hasRoadClosure || tomtom?.roadClosure || false;
 
   if (wazeFeed?.hasAccident && congestionRatio !== null) congestionRatio = Math.min(1, congestionRatio + 0.10);
-  if (wazeTvt && wazeTvt.maxJamLevel >= 4) congestionRatio = Math.max(congestionRatio || 0, 0.85);
-  if (wazeTvt && wazeTvt.maxJamLevel >= 3) congestionRatio = Math.max(congestionRatio || 0, 0.65);
+  if (wazeTvt && wazeTvt.maxJamLevel >= 4 && wazeTvt.totalJamLengthKm > 0.5) {
+    congestionRatio = Math.max(congestionRatio || 0, 0.85);
+  } else if (wazeTvt && wazeTvt.maxJamLevel >= 3 && wazeTvt.totalJamLengthKm > 0.3) {
+    congestionRatio = Math.max(congestionRatio || 0, 0.65);
+  }
   if (hasRoadClosure) { congestionRatio = Math.max(congestionRatio || 0, 0.95); currentSpeed = Math.min(currentSpeed || 5, 5); }
 
   const sources = [];

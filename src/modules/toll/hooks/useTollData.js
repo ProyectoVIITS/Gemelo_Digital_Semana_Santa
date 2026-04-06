@@ -209,7 +209,9 @@ function buildSnapshot(irt, stationId, realTraffic = null) {
   const isBidirectionalSnap = opModeSnap.isBidirectional || false;
   let queueFactor;
 
-  if (isRetorno) {
+  if (realTraffic && realTraffic.congestionRatio != null) {
+    queueFactor = realTraffic.congestionRatio;
+  } else if (isRetorno) {
     // RETORNO PURO (festivos)
     const isGridlock = hour >= 17 && hour <= 20;
     const isPeakReturn = hour >= 13 && hour <= 16;
@@ -334,23 +336,17 @@ function buildSnapshot(irt, stationId, realTraffic = null) {
       laneSpeed = 0;
       laneQueue = 0;
     } else if (isRetLane) {
-      // Carriles RETORNO: velocidad basada en dato real, colas proporcionales a congestión
+      // Carriles RETORNO: velocidad dictada ESTRICTAMENTE por la velocidad global (API), sin castigos horarios arbitrarios
       const realCong = realTraffic?.congestionRatio || 0;
-      let retBaseSpeed;
-      if (realCong > 0.8) {
-        retBaseSpeed = clamp(Math.round(5 + laneVariation), 3, 10);
-      } else if (realCong > 0.5) {
-        retBaseSpeed = clamp(Math.round(speed * 0.6 + laneVariation), 8, 25);
-      } else {
-        retBaseSpeed = clamp(Math.round(speed * 0.85 + (isFacilPass ? 5 : -2) + laneVariation), 15, 60);
-      }
+      let retBaseSpeed = clamp(Math.round(speed * 0.90 + (isFacilPass ? 5 : -2) + laneVariation), 5, 80);
       const retQueue = clamp(Math.round(realCong * 12 * queueFactor + laneVariation * 0.5), 0, 18);
+      
       laneSpeed = retBaseSpeed;
       laneQueue = retQueue;
     } else {
       // Carriles SALIDA: velocidad directa de API + variación por carril
       const realCong = realTraffic?.congestionRatio || 0;
-      laneSpeed = clamp(Math.round(speed + (isFacilPass ? 8 : -2) + laneVariation), 10, 80);
+      laneSpeed = clamp(Math.round(speed + (isFacilPass ? 8 : -2) + laneVariation), 5, 80);
       laneQueue = clamp(Math.round(realCong * 8 * queueFactor + laneVariation * 0.3), 0, 10);
     }
 

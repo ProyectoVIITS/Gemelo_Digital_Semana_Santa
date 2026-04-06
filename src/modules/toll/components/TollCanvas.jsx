@@ -680,19 +680,19 @@ export default function TollCanvas({
       const gridlockSalida = _isGridlock;
       // ── Spawn rate basado en datos reales (Salida) ──
       let effectiveFlow;
-      if (_isRetorno) {
+      if (_hasRealTraffic) {
+        // FLUJO DICTADO POR API:
+        // Si hay alta congestión (ej. >0.6), inyectar flujo bajo-medio visual (para representar tacos visuales en pantalla, muchos carros = mucho tráfico)
+        // Si hay flujo libre (cong < 0.3), flujo visual constante pero ágil
+        const baseF = Math.max(rawFlow, isMini ? 0.05 : 0.12);
+        effectiveFlow = baseF * (1 + _realCongestion * 1.5);
+      } else if (_isRetorno) {
         // En plan retorno, el carril de salida (Bogotá → Afuera) fluye libremente y con bajo volumen
         effectiveFlow = isMini ? 0.04 : 0.08;
       } else if (_isPlenoColapso) {
         effectiveFlow = isMini ? 1.5 : 4.0;
-      } else if (_realCongestion > 0.6) {
-        // APIs dicen congestión alta → spawn elevado
-        effectiveFlow = isMini ? 0.8 : 2.0;
-      } else if (_realCongestion > 0.3) {
-        // APIs dicen moderado
-        effectiveFlow = isMini ? 0.4 : 0.8;
       } else {
-        // APIs dicen fluido o sin datos → flujo normal suave
+        // Fallback horario
         const minVisualFlow = gridlockSalida
           ? (isMini ? 0.04 : 0.08)
           : _isNight
@@ -713,23 +713,22 @@ export default function TollCanvas({
         const vehHour = currentMetrics.vehiclesHour || 100;
         const flowRatio = Math.min(vehHour / 600, 1);
         let approachSpeedBase, approachSpeedVar;
-        if (_isRetorno) {
-          approachSpeedBase = 50 + flowRatio * 20; // Libre
-          approachSpeedVar = 10;
-        } else if (_isPlenoColapso) {
-          approachSpeedBase = 12 + flowRatio * 8;
-          approachSpeedVar = 4 + flowRatio * 4;
-        } else if (_realCongestion > 0.6) {
-          approachSpeedBase = 18 + flowRatio * 10;
-          approachSpeedVar = 5 + flowRatio * 5;
+        if (_hasRealTraffic && _rt.currentSpeed != null) {
+          // VELOCIDAD DICTADA POR API (100% estricto)
+          approachSpeedBase = _rt.currentSpeed;
+          approachSpeedVar = 5;
         } else {
-          // Fluido: approach a velocidad normal
-          approachSpeedBase = 30 + flowRatio * 25;
-          approachSpeedVar = 8 + flowRatio * 12;
-        }
-        if (_hasRealTraffic && !_isRetorno) { // Solo castigar por tráfico si NO es retorno (porque afecta carros de salida)
-          approachSpeedBase = approachSpeedBase * _realSpeedFactor;
-          approachSpeedVar = approachSpeedVar * _realSpeedFactor;
+          // FALLBACK HORARIO
+          if (_isRetorno) {
+            approachSpeedBase = 50 + flowRatio * 20; // Libre
+            approachSpeedVar = 10;
+          } else if (_isPlenoColapso) {
+            approachSpeedBase = 12 + flowRatio * 8;
+            approachSpeedVar = 4 + flowRatio * 4;
+          } else {
+            approachSpeedBase = 30 + flowRatio * 25;
+            approachSpeedVar = 8 + flowRatio * 12;
+          }
         }
 
         if (catDef.isMoto) {
@@ -833,20 +832,28 @@ export default function TollCanvas({
     if (retornoLanes.length > 0) {
       const gridlockActive = _isGridlock;
 
-      // Flujo de retorno: en gridlock o congestión confirmada por API, spawn MASIVO para saturar la vía
-      const retornoFlow = (gridlockActive || (_isRetorno && _realCongestion > 0.6) || (_isRetorno && _isPlenoColapso))
-        ? 1.5 + retornoLanes.length * 0.4  // GRIDLOCK RETORNO: Saturación brutal en der→izq
-        : _isRetorno
-        ? Math.max(0.3, _retScale * 0.6)
-        : 0.04;  // Salida: mínimo
+      let retornoFlow;
+      let MAX_RETORNO_VEH;
+      
+      if (_hasRealTraffic) {
+        // FLUJO RETORNO DICTADO POR API
+        retornoFlow = 0.1 + retornoLanes.length * (_realCongestion * 1.2);
+        MAX_RETORNO_VEH = isMini ? 15 : Math.round(retornoLanes.length * (1 + _realCongestion * 6));
+      } else {
+        // Fallback horario
+        retornoFlow = (gridlockActive || (_isRetorno && _isPlenoColapso))
+          ? 1.5 + retornoLanes.length * 0.4
+          : _isRetorno
+          ? Math.max(0.3, _retScale * 0.6)
+          : 0.04;
+        MAX_RETORNO_VEH = (gridlockActive || (_isRetorno && _isPlenoColapso))
+          ? (isMini ? 20 : retornoLanes.length * 6)
+          : _isRetorno
+          ? (_isNight ? 4 : (isMini ? 8 : 18))
+          : (_isNight ? 2 : (isMini ? 3 : 5));
+      }
+      
       counterAccRef.current += retornoFlow * dt;
-
-      // Vehículos máximos: gridlock = 5 por carril retorno (vía SATURADA como foto campo)
-      const MAX_RETORNO_VEH = (gridlockActive || (_isRetorno && _realCongestion > 0.6))
-        ? (isMini ? 20 : retornoLanes.length * 6)  // 8 carriles × 6 = 48 vehículos
-        : _isRetorno
-        ? (_isNight ? 4 : (isMini ? 8 : 18))
-        : (_isNight ? 2 : (isMini ? 3 : 5));
       const retornoVehCount = vehicles.filter(v => v.isCounter && !v.isMoto).length;
 
       // Round-robin para distribuir uniformemente en TODOS los carriles retorno
@@ -868,18 +875,20 @@ export default function TollCanvas({
         // Normal: 40-70 px/s
         // Velocidad retorno: si hay datos reales, usarlos
         let retSpeed;
-        if (_hasRealTraffic && _rt.congestionRatio > 0.5) {
-          // Datos reales de Google: mapear velocidad real a px/s
-          // 6 km/h real → ~8-12 px/s (gridlock visual)
-          retSpeed = Math.max(6, _rt.currentSpeed * 1.5) + Math.random() * 8;
-        } else if (effectiveGridlock) {
-          retSpeed = 15 + Math.random() * 15;
-        } else if (_isRetorno && _retScale >= 0.60 && _hour >= 13 && _hour <= 20) {
-          retSpeed = 25 + Math.random() * 20;
-        } else if (_isRetorno) {
-          retSpeed = 35 + Math.random() * 25;
+        if (_hasRealTraffic && _rt.currentSpeed != null) {
+          // VELOCIDAD DICTADA POR API (100% estricto)
+          retSpeed = Math.max(6, _rt.currentSpeed); // Mínimo 6 px/s para que se muevan algo
         } else {
-          retSpeed = 45 + Math.random() * 30;
+          // Fallback
+          if (effectiveGridlock) {
+            retSpeed = 15 + Math.random() * 15;
+          } else if (_isRetorno && _retScale >= 0.60 && _hour >= 13 && _hour <= 20) {
+            retSpeed = 25 + Math.random() * 20;
+          } else if (_isRetorno) {
+            retSpeed = 35 + Math.random() * 25;
+          } else {
+            retSpeed = 45 + Math.random() * 30;
+          }
         }
 
         vehicles.push({
@@ -898,8 +907,8 @@ export default function TollCanvas({
       }
       counterAccRef.current = Math.min(counterAccRef.current, 3);
 
-      // ── GRIDLOCK REFILL: garantizar mínimo 6 vehículos por carril retorno ──
-      if (gridlockActive || (_isRetorno && _realCongestion > 0.6)) {
+      // ── GRIDLOCK REFILL: garantizar mínimo de vehículos si la congestión lo pide ──
+      if ((_hasRealTraffic && _realCongestion > 0.8) || (!_hasRealTraffic && gridlockActive)) {
         const MIN_PER_LANE = 6;
         for (const rl of retornoLanes) {
           const inLane = vehicles.filter(v => v.isCounter && !v.isMoto && v.lane === rl).length;
@@ -1052,15 +1061,22 @@ export default function TollCanvas({
             // Valle: 0.5-1s
             // Booth wait basado en congestión REAL de las APIs
             let baseWait;
-            if (_isPlenoColapso) {
-              baseWait = lane?.type === 'FacilPass' ? 3 + Math.random() * 3 : 10 + Math.random() * 8;
-            } else if (_realCongestion > 0.6) {
-              baseWait = lane?.type === 'FacilPass' ? 1.5 + Math.random() * 1.5 : 4 + Math.random() * 4;
-            } else if (_realCongestion > 0.3) {
-              baseWait = lane?.type === 'FacilPass' ? 0.8 + Math.random() * 0.7 : 2 + Math.random() * 1.5;
+            if (_hasRealTraffic) {
+               // En base a la congestión de la API en tiempo real
+               if (_realCongestion > 0.6) {
+                 baseWait = lane?.type === 'FacilPass' ? 1.5 + Math.random() * 1.5 : 4 + Math.random() * 4;
+               } else if (_realCongestion > 0.3) {
+                 baseWait = lane?.type === 'FacilPass' ? 0.8 + Math.random() * 0.7 : 2 + Math.random() * 1.5;
+               } else {
+                 baseWait = lane?.type === 'FacilPass' ? 0.3 + Math.random() * 0.3 : 0.6 + Math.random() * 0.5;
+               }
             } else {
-              // Fluido: paso rápido por caseta
-              baseWait = lane?.type === 'FacilPass' ? 0.3 + Math.random() * 0.3 : 0.6 + Math.random() * 0.5;
+              // Fallback
+              if (_isPlenoColapso) {
+                baseWait = lane?.type === 'FacilPass' ? 3 + Math.random() * 3 : 10 + Math.random() * 8;
+              } else {
+                baseWait = lane?.type === 'FacilPass' ? 0.4 + Math.random() * 0.4 : 1.0 + Math.random() * 1.0;
+              }
             }
             v.waitTimer = baseWait;
           } else {

@@ -50,7 +50,7 @@ app.get('/api/traffic/snapshot', (req, res) => {
   res.setHeader('Access-Control-Allow-Headers', '*');
   
   try {
-    const { getStore } = require('./backend/services/trafficPoller');
+    const { getStore, getTopWazeJams } = require('./backend/services/trafficPoller');
     let modeData = {};
     try {
       const fs = require('fs');
@@ -62,7 +62,7 @@ app.get('/api/traffic/snapshot', (req, res) => {
       type: 'initial_snapshot',
       data: getStore() || {},
       calendar: modeData,
-      nationalWazeJams: []
+      nationalWazeJams: getTopWazeJams() || []
     });
   } catch (err) {
     res.status(500).json({ error: 'Backend poller not initialized yet' });

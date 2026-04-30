@@ -1,0 +1,18 @@
+# SUMO Engine — VIITS NEXUS Digital Twin
+# Python backend for microscopic traffic simulation
+
+# Web Server
+fastapi==0.115.6
+uvicorn[standard]==0.34.0
+websockets==14.1
+
+# SUMO Interface
+traci==1.21.0
+libsumo==1.21.0
+
+# Async HTTP client (para Google/Waze API polling)
+httpx==0.28.1
+
+# Utilities
+python-dotenv==1.0.1
+orjson==3.10.14

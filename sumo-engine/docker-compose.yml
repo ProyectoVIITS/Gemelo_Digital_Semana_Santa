@@ -1,0 +1,45 @@
+# ═══════════════════════════════════════════════════════════════
+# Docker Compose — VIITS NEXUS Gemelo Digital con SUMO Engine
+# ═══════════════════════════════════════════════════════════════
+# Uso:
+#   docker-compose up -d          # Producción
+#   docker-compose up --build     # Reconstruir imagen
+#   docker-compose logs -f sumo   # Ver logs del motor SUMO
+# ═══════════════════════════════════════════════════════════════
+
+version: "3.9"
+
+services:
+  # ── Motor de Microsimulación SUMO ──
+  sumo:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: viits-sumo-engine
+    ports:
+      - "8100:8100"
+    environment:
+      - SUMO_BINARY=sumo
+      - SUMO_NETWORK=C3
+      - SUMO_STEP_LENGTH=0.5
+      - STREAM_INTERVAL=0.5
+      - MAX_VEHICLES=5000
+      - NEXUS_BACKEND_URL=http://host.docker.internal:3000
+      - CALIBRATOR_INTERVAL=30
+    volumes:
+      - ./networks:/app/networks
+      - ./config:/app/config
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8100/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    deploy:
+      resources:
+        limits:
+          cpus: "2.0"
+          memory: 2G
+        reservations:
+          cpus: "0.5"
+          memory: 512M

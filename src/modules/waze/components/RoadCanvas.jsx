@@ -1,300 +1,357 @@
-import React, { useRef, useEffect } from 'react';
+/**
+ * RoadCanvas v2 — Gemelo digital con vehículos SUMO reales sobre geometría OSM
+ *
+ * Modo legacy (sin jamHashId / sin polyline): muestra fallback "Sin geometría disponible".
+ * Modo activo: conecta a /ws/sumo/{jamHashId} y dibuja polilínea Waze como carretera +
+ * vehículos SUMO con color por velocidad y forma por tipo. HUD overlay igual a v1.
+ */
+import React, { useRef, useEffect, useState, useMemo } from 'react';
 
-// Escala Visual: 1 Metro = 4 Pixeles
-const METERS_TO_PX = 4;
-const FPS = 60;
+const WS_RECONNECT_BASE = 1000;
+const WS_RECONNECT_MAX = 30000;
+const FIRST_FRAME_TIMEOUT = 5000;
+const MAX_VEHICLES_RENDER = 500;
+const PADDING_RATIO = 0.075; // 7.5% por lado = 15% total
 
-export default function RoadCanvas({ jamLevel = 3, jamSpeed = 10, jamRatio = 1 }) {
+export default function RoadCanvas({
+  jamLevel = 3,
+  jamSpeed = 10,
+  jamRatio = 1,
+  polyline = [],
+  jamHashId = null,
+  vehicleScale = 1.0,
+}) {
   const canvasRef = useRef(null);
-  const carsRef = useRef([]);
-  const propsRef = useRef({ jamLevel, jamSpeed, jamRatio });
+  const wsRef = useRef(null);
+  const reconnectTimerRef = useRef(null);
+  const reconnectDelayRef = useRef(WS_RECONNECT_BASE);
+  const firstFrameTimerRef = useRef(null);
+  const lastFrameRef = useRef(null);
 
+  const [wsStatus, setWsStatus] = useState('idle'); // idle | connecting | connected | reconnecting | unavailable
+  const [vehicleCount, setVehicleCount] = useState(0);
+  const [step, setStep] = useState(0);
+  const [renderTick, setRenderTick] = useState(0);
+  const [waitingFirstFrame, setWaitingFirstFrame] = useState(true);
+
+  const hasPolyline = Array.isArray(polyline) && polyline.length > 1;
+  const canConnect = !!jamHashId && hasPolyline;
+
+  // ── 1) WebSocket lifecycle ──────────────────────────────────────────
   useEffect(() => {
-    propsRef.current = { jamLevel, jamSpeed, jamRatio };
-  }, [jamLevel, jamSpeed, jamRatio]);
-
-  useEffect(() => {
-    const canvas = canvasRef.current;
-    if (!canvas || !canvas.parentElement) return;
-    
-    const parent = canvas.parentElement;
-    
-    // Usar ResizeObserver para solventar el layout tardío de React Flexbox
-    let width = parent.clientWidth > 10 ? parent.clientWidth : 800;
-    let height = parent.clientHeight > 10 ? parent.clientHeight : 280;
-    
-    // Support High-DPI displays
-    let dpr = window.devicePixelRatio || 1;
-    
-    const applySize = () => {
-      canvas.width = width * dpr;
-      canvas.height = height * dpr;
-      canvas.style.width = `${width}px`;
-      canvas.style.height = `${height}px`;
-    };
-    applySize();
-
-    let animationFrameId;
-
-    // Configuración Vial
-    const roadTopY = 40;
-    const roadBottomY = height - 40;
-    const roadHeight = roadBottomY - roadTopY;
-    const lanes = 3;
-    const laneHeight = roadHeight / lanes;
-    
-    // ─── FÍSICA Y CINEMÁTICA ───
-    // jamSpeed viene en km/h. Convertimos a m/s -> px/s -> px/frame
-    const speedMPS = jamSpeed / 3.6;
-    const speedPXS = speedMPS * METERS_TO_PX;
-    const baseSpeedPxFrame = speedPXS / FPS;
-    
-    // Evitar que queden ABSOLUTAMENTE congelados si el jamSpeed dice 0 o 1 km/h:
-    // Aseguramos un mínimo perceptual lentísimo de 0.05 px por frame.
-    const actualBaseSpeed = Math.max(0.05, baseSpeedPxFrame);
-
-    // Calcular cantidad de vehículos aproximada basada en la densidad de Waze. 
-    // Un nivel 4 (Jam pesado) equivale a carros parados casi llanta con llanta.
-    const spacingFactor = jamLevel >= 4 ? 1.5 : jamLevel === 3 ? 3 : 5; 
-    const carsPerLane = Math.floor(width / (4.5 * METERS_TO_PX * spacingFactor)); 
-
-    // Paleta de colores vehiculares más profesional/sobria
-    const carColors = ['#e2e8f0', '#94a3b8', '#0f172a', '#1e293b', '#b91c1c', '#0369a1'];
-
-    // Inicializar carros ordenados por carril y posición solo si no existen
-    if (carsRef.current.length === 0) {
-      let cars = [];
-      for (let currentLane = 0; currentLane < lanes; currentLane++) {
-        let currentX = width + Math.random() * 50; // Empezar fuera de pantalla
-        for (let j = 0; j < carsPerLane; j++) {
-          const carLength = (4 + Math.random() * 1.5) * METERS_TO_PX; // ~4 - 5.5 metros
-          
-          currentX -= (carLength + 2 * METERS_TO_PX + (Math.random() * 15 * METERS_TO_PX)); // Gap base de 2m + random
-          // Repartir en el ancho inicial disponible
-          if(j === 0) currentX = width * Math.random();
-
-          cars.push({
-            lane: currentLane,
-            x: currentX,
-            y: roadTopY + (currentLane * laneHeight) + (laneHeight / 2),
-            length: carLength,
-            width: 1.8 * METERS_TO_PX, // ~1.8 metros ancho
-            color: carColors[Math.floor(Math.random() * carColors.length)],
-            targetSpeed: actualBaseSpeed * (0.9 + Math.random() * 0.2), // Pequeña variación
-            currentSpeed: 0,
-          });
-        }
-      }
-      carsRef.current = cars;
+    if (!canConnect) {
+      setWsStatus('idle');
+      setWaitingFirstFrame(false);
+      lastFrameRef.current = null;
+      setVehicleCount(0);
+      setStep(0);
+      return undefined;
     }
 
-    // Update & Render Logic
-    let lastTime = performance.now();
-    let accumulator = 0;
-    const fixedDt = 1000 / 60;
+    let cancelled = false;
+    setWsStatus('connecting');
+    setWaitingFirstFrame(true);
+    lastFrameRef.current = null;
+    setVehicleCount(0);
+    setStep(0);
 
-    const render = (timestamp) => {
-      // Actializar size dinámico para Flexbox si cambia
-      if (parent.clientWidth > 10 && Math.abs(parent.clientWidth - width) > 10) {
-        width = parent.clientWidth;
-        applySize();
+    const scheduleReconnect = () => {
+      if (cancelled) return;
+      setWsStatus('reconnecting');
+      const delay = reconnectDelayRef.current;
+      reconnectDelayRef.current = Math.min(delay * 2, WS_RECONNECT_MAX);
+      reconnectTimerRef.current = setTimeout(() => {
+        reconnectTimerRef.current = null;
+        connect();
+      }, delay);
+    };
+
+    const connect = () => {
+      if (cancelled) return;
+      const proto = window.location.hostname === 'localhost' ? 'ws' : 'wss';
+      const url = `${proto}://${window.location.host}/ws/sumo/${jamHashId}`;
+
+      let ws;
+      try {
+        ws = new WebSocket(url);
+      } catch {
+        scheduleReconnect();
+        return;
       }
+      wsRef.current = ws;
 
-      const ctx = canvas.getContext('2d');
-      ctx.save();
-      ctx.scale(dpr, dpr);
-      ctx.clearRect(0, 0, width, height);
+      if (firstFrameTimerRef.current) clearTimeout(firstFrameTimerRef.current);
+      firstFrameTimerRef.current = setTimeout(() => {
+        if (cancelled) return;
+        setWaitingFirstFrame(false);
+      }, FIRST_FRAME_TIMEOUT);
 
-      // Fondo exterior (pasto/tierra nocturna)
-      ctx.fillStyle = '#0a0e17';
-      ctx.fillRect(0, 0, width, height);
+      ws.onopen = () => {
+        if (cancelled) return;
+        setWsStatus('connected');
+        reconnectDelayRef.current = WS_RECONNECT_BASE;
+      };
 
-      // Asfalto
-      ctx.fillStyle = '#111827'; 
-      ctx.fillRect(0, roadTopY, width, roadHeight);
-
-      // Líneas continuas asfalto
-      ctx.fillStyle = '#1e293b';
-      ctx.fillRect(0, roadTopY - 1, width, 1);
-      ctx.fillRect(0, roadBottomY, width, 1);
-
-      // Líneas punteadas de carril
-      ctx.strokeStyle = '#334155';
-      ctx.lineWidth = 1;
-      ctx.setLineDash([15, 15]);
-      for (let i = 1; i < lanes; i++) {
-        ctx.beginPath();
-        const lineY = roadTopY + i * laneHeight;
-        ctx.moveTo(0, lineY);
-        ctx.lineTo(width, lineY);
-        ctx.stroke();
-      }
-      ctx.setLineDash([]); 
-
-      // Físicas y Renderizado Vehicular usando Fixed Timestep
-      let rawDelta = timestamp - lastTime;
-      if (rawDelta > 100) rawDelta = 100;
-      lastTime = timestamp;
-      accumulator += rawDelta;
-
-      const { jamLevel: dynJamLevel, jamSpeed: dynJamSpeed, jamRatio: dynJamRatio } = propsRef.current;
-      const dynIsSevere = dynJamLevel >= 3 || dynJamRatio > 2;
-      const dynSpeedMPS = dynJamSpeed / 3.6;
-      const dynSpeedPXS = dynSpeedMPS * METERS_TO_PX;
-      const dynBaseSpeedPxFrame = dynSpeedPXS / 60;
-      const dynActualBaseSpeed = Math.max(0.05, dynBaseSpeedPxFrame);
-
-      // Physics logic sub-stepping
-      while (accumulator >= fixedDt) {
-        for (let currentLane = 0; currentLane < lanes; currentLane++) {
-          const laneCars = carsRef.current.filter(c => c.lane === currentLane).sort((a, b) => b.x - a.x);
-          for (let i = 0; i < laneCars.length; i++) {
-            const car = laneCars[i];
-            const leader = i > 0 ? laneCars[i - 1] : null;
-
-            car.targetSpeed = dynActualBaseSpeed * (0.9 + (car.x % 0.2)); 
-            let speedToApply = car.targetSpeed;
-            car.isBraking = false;
-
-            if (leader) {
-              const distanceToLeader = leader.x - (car.x + car.length);
-              const safeDistance = 1 * METERS_TO_PX + (car.currentSpeed * 10); 
-              
-              if (distanceToLeader < safeDistance) {
-                speedToApply = leader.currentSpeed * 0.9;
-                car.isBraking = true;
-              } else if (distanceToLeader < safeDistance * 2) {
-                speedToApply = leader.currentSpeed;
-              }
-            }
-
-            car.currentSpeed += (speedToApply - car.currentSpeed) * 0.1;
-            car.x += car.currentSpeed;
-
-            if (car.x > width + 20) {
-              const lastCar = laneCars[laneCars.length - 1];
-              car.x = lastCar ? lastCar.x - (car.length + 8 * METERS_TO_PX) : -car.length;
-              car.currentSpeed = dynActualBaseSpeed;
+      ws.onmessage = (ev) => {
+        if (cancelled) return;
+        try {
+          const msg = JSON.parse(ev.data);
+          if (msg?.type === 'sumo_frame' && msg.data) {
+            lastFrameRef.current = msg.data;
+            setVehicleCount(msg.data.vehicleCount || 0);
+            setStep(msg.data.step || 0);
+            setWaitingFirstFrame(false);
+            setRenderTick((c) => c + 1);
+            if (firstFrameTimerRef.current) {
+              clearTimeout(firstFrameTimerRef.current);
+              firstFrameTimerRef.current = null;
             }
           }
+        } catch {
+          /* mensaje no-JSON o malformado: ignorar */
         }
-        accumulator -= fixedDt;
-      }
+      };
 
-      // Brillo rojo de Alerta Severa
-      if (dynIsSevere) {
-        const gradient = ctx.createLinearGradient(0, roadTopY, 0, roadBottomY);
-        gradient.addColorStop(0, 'rgba(239, 68, 68, 0.08)');
-        gradient.addColorStop(0.5, 'rgba(239, 68, 68, 0.01)');
-        gradient.addColorStop(1, 'rgba(239, 68, 68, 0.08)');
-        ctx.fillStyle = gradient;
-        ctx.fillRect(0, roadTopY, width, roadHeight);
-      }
-
-      for (let currentLane = 0; currentLane < lanes; currentLane++) {
-        const laneCars = carsRef.current.filter(c => c.lane === currentLane).sort((a, b) => b.x - a.x);
-        for (let i = 0; i < laneCars.length; i++) {
-          const car = laneCars[i];
-          const isBraking = car.isBraking || false;
-
-          // ─── DIBUJAR VEHÍCULO (High Fidelity) ───
-          const cy = car.y;
-          const cx = car.x;
-          
-          ctx.save();
-          ctx.translate(cx, cy);
-
-          // Sombra perimetral
-          ctx.shadowColor = 'rgba(0,0,0,0.5)';
-          ctx.shadowBlur = 4;
-          ctx.shadowOffsetY = 2;
-
-          // Chasis (Cuerpo)
-          ctx.fillStyle = car.color;
-          ctx.beginPath();
-          ctx.roundRect(0, -car.width/2, car.length, car.width, 2);
-          ctx.fill();
-
-          // Resetear sombras para detalles internos
-          ctx.shadowColor = 'transparent';
-          ctx.shadowBlur = 0;
-          ctx.shadowOffsetY = 0;
-
-          // Techo/Chasis superior (un poco más oscuro para volumen 3D top-down)
-          ctx.fillStyle = 'rgba(0,0,0,0.15)';
-          ctx.beginPath();
-          // El techo ocupa aprox un 50% de la longitud, centrado
-          ctx.roundRect(car.length * 0.25, -car.width * 0.4, car.length * 0.45, car.width * 0.8, 1);
-          ctx.fill();
-
-          // Parabrisas Frontal
-          ctx.fillStyle = 'rgba(15, 23, 42, 0.9)'; // Vidrio oscuro
-          ctx.beginPath();
-          ctx.roundRect(car.length * 0.65, -car.width * 0.35, car.length * 0.1, car.width * 0.7, 1);
-          ctx.fill();
-          
-          // Parabrisas Trasero
-          ctx.fillStyle = 'rgba(15, 23, 42, 0.8)';
-          ctx.beginPath();
-          ctx.roundRect(car.length * 0.2, -car.width * 0.35, car.length * 0.08, car.width * 0.7, 1);
-          ctx.fill();
-
-          // Stop Lights (Tail Lights)
-          const tailLightColor = isBraking ? '#ef4444' : '#7f1d1d';
-          ctx.fillStyle = tailLightColor;
-          if (isBraking) {
-            ctx.shadowColor = '#ef4444';
-            ctx.shadowBlur = 6;
+      ws.onclose = (ev) => {
+        if (cancelled) return;
+        wsRef.current = null;
+        if (ev.code === 4404) {
+          setWsStatus('unavailable');
+          if (firstFrameTimerRef.current) {
+            clearTimeout(firstFrameTimerRef.current);
+            firstFrameTimerRef.current = null;
           }
-          // Izquierda
-          ctx.fillRect(0, -car.width * 0.45, 2, car.width * 0.2);
-          // Derecha
-          ctx.fillRect(0, car.width * 0.25, 2, car.width * 0.2);
-          
-          // HeadLights (Luces delanteras sutiles apuntando al frente)
-          ctx.shadowBlur = 0;
-          ctx.fillStyle = '#fef08a';
-          ctx.fillRect(car.length - 2, -car.width * 0.45, 2, car.width * 0.2);
-          ctx.fillRect(car.length - 2, car.width * 0.25, 2, car.width * 0.2);
+          return;
+        }
+        scheduleReconnect();
+      };
 
-          // HeadLight Glow (Rayo volumétrico muy tenue)
-          const lightGlow = ctx.createLinearGradient(car.length, 0, car.length + 12, 0);
-          lightGlow.addColorStop(0, 'rgba(254, 240, 138, 0.15)');
-          lightGlow.addColorStop(1, 'transparent');
-          ctx.fillStyle = lightGlow;
-          ctx.fillRect(car.length, -car.width * 0.5, 12, car.width);
+      ws.onerror = () => {
+        /* el handler de close gestiona el reintento */
+      };
+    };
 
+    connect();
+
+    return () => {
+      cancelled = true;
+      if (reconnectTimerRef.current) {
+        clearTimeout(reconnectTimerRef.current);
+        reconnectTimerRef.current = null;
+      }
+      if (firstFrameTimerRef.current) {
+        clearTimeout(firstFrameTimerRef.current);
+        firstFrameTimerRef.current = null;
+      }
+      if (wsRef.current) {
+        try { wsRef.current.close(); } catch { /* noop */ }
+        wsRef.current = null;
+      }
+    };
+  }, [jamHashId, canConnect]);
+
+  // ── 2) ResizeObserver: triggea redraw en cambio de tamaño del parent ──
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    const parent = canvas?.parentElement;
+    if (!parent || typeof ResizeObserver === 'undefined') return undefined;
+    const ro = new ResizeObserver(() => setRenderTick((c) => c + 1));
+    ro.observe(parent);
+    return () => ro.disconnect();
+  }, []);
+
+  // bbox precomputado de la polilínea
+  const bbox = useMemo(() => {
+    if (!hasPolyline) return null;
+    let minLon = Infinity, maxLon = -Infinity, minLat = Infinity, maxLat = -Infinity;
+    for (const p of polyline) {
+      if (p?.x == null || p?.y == null) continue;
+      if (p.x < minLon) minLon = p.x;
+      if (p.x > maxLon) maxLon = p.x;
+      if (p.y < minLat) minLat = p.y;
+      if (p.y > maxLat) maxLat = p.y;
+    }
+    if (!Number.isFinite(minLon) || !Number.isFinite(minLat)) return null;
+    return { minLon, maxLon, minLat, maxLat };
+  }, [polyline, hasPolyline]);
+
+  // ── 3) Drawing ──────────────────────────────────────────────────────
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const parent = canvas.parentElement;
+    if (!parent) return;
+
+    const w = parent.clientWidth > 10 ? parent.clientWidth : 800;
+    const h = parent.clientHeight > 10 ? parent.clientHeight : 260;
+    const dpr = window.devicePixelRatio || 1;
+    canvas.width = Math.round(w * dpr);
+    canvas.height = Math.round(h * dpr);
+    canvas.style.width = `${w}px`;
+    canvas.style.height = `${h}px`;
+
+    const ctx = canvas.getContext('2d');
+    ctx.save();
+    ctx.scale(dpr, dpr);
+
+    // Fondo
+    ctx.fillStyle = '#0a0e17';
+    ctx.fillRect(0, 0, w, h);
+
+    // Carretera (polilínea Waze) + vehículos SUMO
+    if (bbox) {
+      const padX = w * PADDING_RATIO;
+      const padY = h * PADDING_RATIO;
+      const lonRange = bbox.maxLon - bbox.minLon || 0.0001;
+      const latRange = bbox.maxLat - bbox.minLat || 0.0001;
+      const scaleX = (w - 2 * padX) / lonRange;
+      const scaleY = (h - 2 * padY) / latRange;
+      const scale = Math.min(scaleX, scaleY);
+      const drawnW = lonRange * scale;
+      const drawnH = latRange * scale;
+      const offsetX = (w - drawnW) / 2;
+      const offsetY = (h - drawnH) / 2;
+
+      const project = (lon, lat) => ({
+        px: (lon - bbox.minLon) * scale + offsetX,
+        py: h - ((lat - bbox.minLat) * scale + offsetY),
+      });
+
+      // Polilínea Waze como asfalto
+      ctx.strokeStyle = '#1f2937';
+      ctx.lineWidth = 6;
+      ctx.lineCap = 'round';
+      ctx.lineJoin = 'round';
+      ctx.beginPath();
+      let started = false;
+      for (let i = 0; i < polyline.length; i++) {
+        const p = polyline[i];
+        if (p?.x == null || p?.y == null) continue;
+        const { px, py } = project(p.x, p.y);
+        if (!started) { ctx.moveTo(px, py); started = true; }
+        else { ctx.lineTo(px, py); }
+      }
+      if (started) ctx.stroke();
+
+      // Vehículos SUMO del último frame
+      const frame = lastFrameRef.current;
+      if (frame && Array.isArray(frame.vehicles)) {
+        const vehicles = frame.vehicles.length > MAX_VEHICLES_RENDER
+          ? frame.vehicles.slice(0, MAX_VEHICLES_RENDER)
+          : frame.vehicles;
+
+        for (const v of vehicles) {
+          if (v?.lon == null || v?.lat == null) continue;
+          const { px, py } = project(v.lon, v.lat);
+          const speed = typeof v.speed === 'number' ? v.speed : 0;
+          let color;
+          if (speed < 5) color = '#ef4444';
+          else if (speed < 20) color = '#f59e0b';
+          else color = '#10b981';
+
+          let len, wid;
+          switch (v.type) {
+            case 'moto':  len = 6;  wid = 6;   break;
+            case 'truck': len = 16; wid = 6;   break;
+            case 'bus':   len = 18; wid = 6;   break;
+            case 'car':
+            default:      len = 12; wid = 5;   break;
+          }
+          len *= vehicleScale;
+          wid *= vehicleScale;
+
+          // SUMO angle: 0=N, 90=E, sentido horario.
+          // Canvas: rotate(0) = +X (Este), Y crece hacia abajo.
+          // Para que un vehículo SUMO con angle=0 (rumbo Norte) apunte hacia arriba en canvas,
+          // necesitamos rotación = (sumoAngle - 90) * π/180 (en sistema canvas Y-down).
+          const angleRad = (((v.angle ?? 0) - 90) * Math.PI) / 180;
+          ctx.save();
+          ctx.translate(px, py);
+          ctx.rotate(angleRad);
+          ctx.fillStyle = color;
+          ctx.fillRect(-len / 2, -wid / 2, len, wid);
           ctx.restore();
         }
       }
+    }
 
-      // ─── HUD UI Overlay (Removido clearRect destructivo) ───
-      // Opcionalmente un gradiente muy sutil en bordes para destacar.
-      
-      // Etiquetas informativas del simulador corporativo
-      ctx.fillStyle = '#14b8a6'; 
-      ctx.font = "bold 9px 'JetBrains Mono', monospace";
-      ctx.fillText(`SINCRONIZANDO GEMELO DIGITAL`, 12, 18);
-      
-      const speedText = `${Math.round(propsRef.current.jamSpeed)} KM/H`;
-      const ratioText = `${propsRef.current.jamRatio}x DELAY`;
-      
-      const dynIsSevereRender = propsRef.current.jamLevel >= 3 || propsRef.current.jamRatio > 2;
-      ctx.fillStyle = dynIsSevereRender ? '#ef4444' : '#f59e0b';
-      ctx.fillText(`⚡ VELOCIDAD VÍA: ${speedText}  |  🕒 EXCESO: ${ratioText}`, width - 240, 18);
+    // ── HUD overlay ──
+    ctx.fillStyle = '#14b8a6';
+    ctx.font = "bold 9px 'JetBrains Mono', monospace";
+    ctx.textBaseline = 'alphabetic';
+    ctx.fillText('SINCRONIZANDO GEMELO DIGITAL', 12, 18);
 
-      ctx.restore();
-      animationFrameId = requestAnimationFrame(render);
-    };
+    const isSevere = jamLevel >= 3 || jamRatio > 2;
+    ctx.fillStyle = isSevere ? '#ef4444' : '#f59e0b';
+    const speedText = `${Math.round(jamSpeed)} KM/H`;
+    const ratioText = `${jamRatio}x DELAY`;
+    const topRight = `⚡ VELOCIDAD VÍA: ${speedText}  |  🕒 EXCESO: ${ratioText}`;
+    ctx.fillText(topRight, w - 240, 18);
 
-    animationFrameId = requestAnimationFrame(render);
-    return () => cancelAnimationFrame(animationFrameId);
-  }, []);
+    // Bottom-left: contador de vehículos + paso de simulación
+    ctx.fillStyle = '#64748b';
+    ctx.font = "9px 'JetBrains Mono', monospace";
+    ctx.fillText(`${vehicleCount} vehículos · paso ${step}`, 12, h - 12);
+
+    // Bottom-right: estado del WebSocket
+    let statusEmoji = '⚪';
+    let statusText = 'sin vía';
+    switch (wsStatus) {
+      case 'connected':    statusEmoji = '🟢'; statusText = 'SUMO live';        break;
+      case 'connecting':
+      case 'reconnecting': statusEmoji = '🟡'; statusText = 'reconectando...';  break;
+      case 'unavailable':  statusEmoji = '🔴'; statusText = 'no disponible';    break;
+      case 'idle':         statusEmoji = '⚪'; statusText = 'sin vía';          break;
+      default: break;
+    }
+    if (canConnect || wsStatus !== 'idle') {
+      const statusLabel = `${statusEmoji} ${statusText}`;
+      const m = ctx.measureText(statusLabel);
+      ctx.fillText(statusLabel, w - m.width - 12, h - 12);
+    }
+
+    ctx.restore();
+  }, [
+    renderTick, polyline, bbox, vehicleScale,
+    jamLevel, jamSpeed, jamRatio,
+    wsStatus, vehicleCount, step, canConnect,
+  ]);
+
+  // ── Mensaje de fallback overlay (HTML, no canvas) ──
+  let fallbackMessage = null;
+  if (!canConnect) {
+    fallbackMessage = 'Sin geometría disponible';
+  } else if (wsStatus === 'unavailable') {
+    fallbackMessage = 'Gemelo digital no disponible para esta vía';
+  } else if (!lastFrameRef.current && !waitingFirstFrame) {
+    fallbackMessage = 'Esperando gemelo digital...';
+  }
 
   return (
-    <canvas 
-      ref={canvasRef} 
-      style={{ display: 'block', width: '100%', height: '100%', borderRadius: '4px' }} 
-    />
+    <div style={{ position: 'relative', width: '100%', height: '100%' }}>
+      <canvas
+        ref={canvasRef}
+        style={{ display: 'block', width: '100%', height: '100%', borderRadius: '4px' }}
+      />
+      {fallbackMessage && (
+        <div
+          style={{
+            position: 'absolute',
+            inset: 0,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            background: 'rgba(10, 14, 23, 0.55)',
+            color: '#94a3b8',
+            fontFamily: "'JetBrains Mono', monospace",
+            fontSize: 12,
+            letterSpacing: 0.5,
+            pointerEvents: 'none',
+          }}
+        >
+          {fallbackMessage}
+        </div>
+      )}
+    </div>
   );
 }

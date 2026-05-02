@@ -1,16 +1,19 @@
 """
-SUMO Engine — FastAPI Server + TraCI Controller (v2 con inyección Waze)
-Motor de microsimulación para el Gemelo Digital VIITS-NEXUS
-
-Cambios v2:
-  - inject_vehicles() para inyección dinámica
-  - _current_network expuesto al calibrador
-  - TrafficCalibrator arrancado en lifespan
-  - Endpoint /api/calibrator/status y /api/inject
+SUMO Engine — FastAPI Server v3 (Multi-Instancia)
+==================================================
+Cambios v3 sobre v2:
+  - SUMOPool: hasta SUMO_MAX_INSTANCES instancias paralelas (default 10)
+  - SUMOInstance: cada instancia con su propio TraCI label
+  - WebSocket parametrizado: /ws/sumo/{jam_hash}
+  - WebSocket legacy /ws/sumo: sticky al top_jam_hash al momento de conectar
+  - Endpoints /api/pool/{start|stop|status}
+  - Auto-shutdown: instancias sin clientes >SUMO_INSTANCE_TTL segundos
+  - Eviction LRU al alcanzar capacidad (sin desalojar instancias con clientes)
+  - Calibrador v4 habla directamente con SUMOPool (sin adapter)
+  - /api/calibrate y /api/inject aceptan ?hash=XXX opcional
 """
 
 import os
-import sys
 import json
 import asyncio
 import time
@@ -20,7 +23,7 @@ from pathlib import Path
 from contextlib import asynccontextmanager
 from typing import Optional
 
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect
+from fastapi import FastAPI, WebSocket, WebSocketDisconnect, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from dotenv import load_dotenv
 
@@ -39,19 +42,21 @@ CONFIG_DIR = Path(__file__).parent / "config"
 STEP_LENGTH = float(os.getenv("SUMO_STEP_LENGTH", "0.5"))
 STREAM_INTERVAL = float(os.getenv("STREAM_INTERVAL", "0.5"))
 MAX_VEHICLES = int(os.getenv("MAX_VEHICLES", "5000"))
+SUMO_MAX_INSTANCES = int(os.getenv("SUMO_MAX_INSTANCES", "10"))
+SUMO_INSTANCE_TTL = float(os.getenv("SUMO_INSTANCE_TTL", "600"))
+HOUSEKEEPING_INTERVAL = float(os.getenv("HOUSEKEEPING_INTERVAL", "60"))
 
 logging.basicConfig(level=logging.INFO, format="[SUMO-Engine] %(message)s")
 log = logging.getLogger("sumo-engine")
 
-simulation_state = {
-    "running": False,
-    "step": 0,
-    "vehicle_count": 0,
-    "network_id": None,
-    "network_bounds": None,
-}
-
 WAZE_MANIFEST_PATH = NETWORK_DIR / "waze_segments" / "manifest.json"
+
+VEHICLE_DISTRIBUTION = [
+    ("car", 0.65),
+    ("moto", 0.20),
+    ("truck", 0.10),
+    ("bus", 0.05),
+]
 
 
 def load_waze_manifest() -> list:
@@ -65,80 +70,110 @@ def load_waze_manifest() -> list:
         return []
 
 
-connected_clients: set[WebSocket] = set()
+def _resolve_sumocfg(network_id: str) -> Optional[Path]:
+    """Acepta 'waze_HASH', 'HASH' o ID de peaje. Devuelve Path o None."""
+    direct = CONFIG_DIR / f"{network_id}.sumocfg"
+    if direct.exists():
+        return direct
+    waze = CONFIG_DIR / f"waze_{network_id}.sumocfg"
+    if waze.exists():
+        return waze
+    return None
 
-VEHICLE_DISTRIBUTION = [
-    ("car", 0.65),
-    ("moto", 0.20),
-    ("truck", 0.10),
-    ("bus", 0.05),
-]
+
+def _normalize_hash(network_id: str) -> str:
+    """De 'waze_HASH' devuelve 'HASH'. De 'HASH' devuelve 'HASH'."""
+    if network_id.startswith("waze_"):
+        return network_id[len("waze_"):]
+    return network_id
 
 
-class SUMOController:
-    def __init__(self):
+def _pick_vehicle_type() -> str:
+    r = random.random()
+    cum = 0.0
+    for vt, prob in VEHICLE_DISTRIBUTION:
+        cum += prob
+        if r <= cum:
+            return vt
+    return "car"
+
+
+# ─────────────────────────────────────────────────────────────────────
+# SUMOInstance
+# ─────────────────────────────────────────────────────────────────────
+class SUMOInstance:
+    def __init__(self, jam_hash: str, sumocfg_path: Path):
+        self.jam_hash = jam_hash
+        self.label = f"sumo_{jam_hash}"
+        self.sumocfg_path = sumocfg_path
         self.is_running = False
         self.step_count = 0
         self.network_bounds = None
-        self._current_network = None
+        self.clients: set[WebSocket] = set()
+        self.last_client_disconnect: Optional[float] = time.time()
+        self.created_at: float = time.time()
+        self.last_step_vehicles: int = 0
 
-    def start(self, network_id: str = "C3"):
-        if not TRACI_AVAILABLE:
-            log.warning("TraCI no instalado — modo simulado")
-            self.is_running = True
-            self._current_network = network_id
-            simulation_state["running"] = True
-            simulation_state["network_id"] = network_id
+    def _switch(self):
+        if TRACI_AVAILABLE:
+            traci.switch(self.label)
+
+    def start(self) -> bool:
+        if self.is_running:
             return True
-
-        sumocfg = CONFIG_DIR / f"{network_id}.sumocfg"
-        if not sumocfg.exists():
-            log.error(f"Configuracion no encontrada: {sumocfg}")
+        if not TRACI_AVAILABLE:
+            self.is_running = True
+            return True
+        if not self.sumocfg_path.exists():
+            log.error(f"[{self.jam_hash}] cfg no existe: {self.sumocfg_path}")
             return False
-
         try:
             sumo_cmd = [
                 SUMO_BINARY,
-                "-c", str(sumocfg),
+                "-c", str(self.sumocfg_path),
                 "--step-length", str(STEP_LENGTH),
                 "--no-warnings", "true",
                 "--no-step-log", "true",
                 "--random",
                 "--start",
             ]
-            traci.start(sumo_cmd)
-
-            self.network_bounds = traci.simulation.getNetBoundary()
-            simulation_state["network_bounds"] = {
-                "min": {"x": self.network_bounds[0][0], "y": self.network_bounds[0][1]},
-                "max": {"x": self.network_bounds[1][0], "y": self.network_bounds[1][1]},
+            traci.start(sumo_cmd, label=self.label)
+            traci.switch(self.label)
+            bounds = traci.simulation.getNetBoundary()
+            self.network_bounds = {
+                "min": {"x": bounds[0][0], "y": bounds[0][1]},
+                "max": {"x": bounds[1][0], "y": bounds[1][1]},
             }
-
             self.is_running = True
-            self._current_network = network_id
-            simulation_state["running"] = True
-            simulation_state["network_id"] = network_id
-            log.info(f"SUMO iniciado red '{network_id}' bounds: {self.network_bounds}")
+            log.info(f"[{self.jam_hash}] iniciada — bounds {bounds}")
             return True
         except Exception as e:
-            log.error(f"Error iniciando SUMO: {e}")
+            log.error(f"[{self.jam_hash}] error iniciando SUMO: {e}")
             return False
+
+    def stop(self):
+        if not self.is_running:
+            return
+        if TRACI_AVAILABLE:
+            try:
+                traci.switch(self.label)
+                traci.close()
+            except Exception:
+                pass
+        self.is_running = False
+        log.info(f"[{self.jam_hash}] detenida")
 
     def step(self) -> dict:
         if not self.is_running:
             return {"vehicles": [], "step": 0}
-
         self.step_count += 1
-        simulation_state["step"] = self.step_count
-
         if not TRACI_AVAILABLE:
             return self._simulated_step()
-
         try:
+            self._switch()
             traci.simulationStep()
             vehicles = []
             veh_ids = traci.vehicle.getIDList()
-
             for vid in veh_ids[:MAX_VEHICLES]:
                 x, y = traci.vehicle.getPosition(vid)
                 speed = traci.vehicle.getSpeed(vid)
@@ -146,7 +181,6 @@ class SUMOController:
                 vtype = traci.vehicle.getTypeID(vid)
                 angle = traci.vehicle.getAngle(vid)
                 lon, lat = traci.simulation.convertGeo(x, y)
-
                 vehicles.append({
                     "id": vid,
                     "x": round(x, 1),
@@ -158,9 +192,7 @@ class SUMOController:
                     "lane": lane_id,
                     "type": vtype,
                 })
-
-            simulation_state["vehicle_count"] = len(vehicles)
-
+            self.last_step_vehicles = len(vehicles)
             return {
                 "vehicles": vehicles,
                 "step": self.step_count,
@@ -170,98 +202,75 @@ class SUMOController:
                 "arrived": traci.simulation.getArrivedNumber(),
             }
         except traci.exceptions.FatalTraCIError:
-            log.error("Conexion TraCI perdida")
+            log.error(f"[{self.jam_hash}] conexion TraCI perdida")
             self.is_running = False
-            simulation_state["running"] = False
             return {"vehicles": [], "step": self.step_count, "error": "traci_disconnected"}
 
-    def calibrate(self, edge_id: str, speed_kmh: float, flow_vph: float):
+    def calibrate(self, edge_id: str, speed_kmh: float, flow_vph: float = 0) -> bool:
         if not TRACI_AVAILABLE or not self.is_running:
-            return
+            return False
         try:
-            speed_ms = speed_kmh / 3.6
-            traci.edge.setMaxSpeed(edge_id, speed_ms)
-            log.info(f"Calibrado edge '{edge_id}': {speed_kmh} km/h, {flow_vph} veh/h")
+            self._switch()
+            traci.edge.setMaxSpeed(edge_id, speed_kmh / 3.6)
+            return True
         except Exception as e:
-            log.warning(f"Error calibrando edge '{edge_id}': {e}")
+            log.warning(f"[{self.jam_hash}] error calibrando '{edge_id}': {e}")
+            return False
 
     def get_drivable_edges(self) -> list:
         if not TRACI_AVAILABLE or not self.is_running:
             return []
         try:
-            all_edges = traci.edge.getIDList()
-            return [e for e in all_edges if not e.startswith(":")]
+            self._switch()
+            return [e for e in traci.edge.getIDList() if not e.startswith(":")]
         except Exception:
             return []
 
-    def get_current_vehicle_count(self) -> int:
+    def get_vehicle_count(self) -> int:
         if not TRACI_AVAILABLE or not self.is_running:
             return 0
         try:
+            self._switch()
             return len(traci.vehicle.getIDList())
         except Exception:
             return 0
 
-    def inject_vehicles(self, target_count: int, edges_pool: Optional[list] = None) -> dict:
+    def inject_vehicles(self, target_count: int) -> dict:
         if not TRACI_AVAILABLE or not self.is_running:
-            return {"injected": 0, "current": 0, "skipped": "not_running"}
-
+            return {"injected": 0, "skipped": "not_running"}
         try:
-            current = self.get_current_vehicle_count()
+            self._switch()
+            current = len(traci.vehicle.getIDList())
             to_inject = max(0, target_count - current)
-
             if to_inject == 0:
                 return {"injected": 0, "current": current, "target": target_count}
-
-            if not edges_pool:
-                edges_pool = self.get_drivable_edges()
-
+            edges_pool = [e for e in traci.edge.getIDList() if not e.startswith(":")]
             if not edges_pool:
                 return {"injected": 0, "current": current, "skipped": "no_edges"}
-
             injected = 0
             failed = 0
             for i in range(to_inject):
-                r = random.random()
-                cum = 0.0
-                vtype = "car"
-                for vt, prob in VEHICLE_DISTRIBUTION:
-                    cum += prob
-                    if r <= cum:
-                        vtype = vt
-                        break
-
+                vtype = _pick_vehicle_type()
                 origin_edge = random.choice(edges_pool)
                 dest_edge = random.choice(edges_pool)
-
                 veh_id = f"inj_{int(time.time() * 1000)}_{i}"
                 route_id = f"route_{veh_id}"
-
                 try:
                     traci.route.add(route_id, [origin_edge, dest_edge])
                     traci.vehicle.add(
-                        vehID=veh_id,
-                        routeID=route_id,
-                        typeID=vtype,
-                        depart="now",
-                        departLane="best",
-                        departSpeed="random",
+                        vehID=veh_id, routeID=route_id, typeID=vtype,
+                        depart="now", departLane="best", departSpeed="random",
                     )
                     injected += 1
                 except traci.exceptions.TraCIException:
                     try:
                         traci.route.add(route_id, [origin_edge])
                         traci.vehicle.add(
-                            vehID=veh_id,
-                            routeID=route_id,
-                            typeID=vtype,
-                            depart="now",
+                            vehID=veh_id, routeID=route_id, typeID=vtype, depart="now",
                         )
                         injected += 1
                     except Exception:
                         failed += 1
-
-            log.info(f"Inyeccion: {injected} OK, {failed} fallidos, total ahora ~{current + injected}")
             return {
                 "injected": injected,
                 "failed": failed,
@@ -270,19 +279,35 @@ class SUMOController:
                 "edges_pool_size": len(edges_pool),
             }
         except Exception as e:
-            log.error(f"Error en inject_vehicles: {e}")
+            log.error(f"[{self.jam_hash}] error en inject_vehicles: {e}")
             return {"injected": 0, "error": str(e)}
 
-    def stop(self):
-        if TRACI_AVAILABLE and self.is_running:
-            try:
-                traci.close()
-            except Exception:
-                pass
-        self.is_running = False
-        self._current_network = None
-        simulation_state["running"] = False
-        log.info("SUMO detenido")
+    def add_client(self, ws: WebSocket):
+        self.clients.add(ws)
+        self.last_client_disconnect = None
+
+    def remove_client(self, ws: WebSocket):
+        self.clients.discard(ws)
+        if not self.clients:
+            self.last_client_disconnect = time.time()
+
+    def status(self) -> dict:
+        now = time.time()
+        return {
+            "hash": self.jam_hash,
+            "label": self.label,
+            "is_running": self.is_running,
+            "step": self.step_count,
+            "vehicles": self.last_step_vehicles,
+            "clients_count": len(self.clients),
+            "uptime_s": round(now - self.created_at, 1),
+            "last_client_disconnect_s_ago": (
+                round(now - self.last_client_disconnect, 1)
+                if self.last_client_disconnect else None
+            ),
+            "network_bounds": self.network_bounds,
+            "cfg": str(self.sumocfg_path.name),
+        }
 
     def _simulated_step(self) -> dict:
         import math
@@ -292,7 +317,7 @@ class SUMOController:
         for i in range(n_vehicles):
             phase = (t * 0.3 + i * 0.5) % 20
             vehicles.append({
-                "id": f"veh_{i}",
+                "id": f"veh_{self.jam_hash}_{i}",
                 "x": phase * 100,
                 "y": 50 + (i % 3) * 20 + math.sin(t + i) * 2,
                 "lon": -74.272 + phase * 0.001,
@@ -302,7 +327,7 @@ class SUMOController:
                 "lane": f"lane_{i % 3}",
                 "type": ["car", "bus", "truck"][i % 3],
             })
-        simulation_state["vehicle_count"] = len(vehicles)
+        self.last_step_vehicles = len(vehicles)
         return {
             "vehicles": vehicles,
             "step": self.step_count,
@@ -313,40 +338,180 @@ class SUMOController:
         }
 
 
-controller = SUMOController()
+# ─────────────────────────────────────────────────────────────────────
+# SUMOPool
+# ─────────────────────────────────────────────────────────────────────
+class SUMOPool:
+    def __init__(self, max_instances: int = SUMO_MAX_INSTANCES):
+        self.instances: dict[str, SUMOInstance] = {}
+        self.top_jam_hash: Optional[str] = None
+        self.max_instances = max_instances
+        self._lock = asyncio.Lock()
+
+    def get_instance(self, jam_hash: str) -> Optional[SUMOInstance]:
+        return self.instances.get(_normalize_hash(jam_hash))
+
+    def get_top_instance(self) -> Optional[SUMOInstance]:
+        if not self.top_jam_hash:
+            return None
+        return self.instances.get(self.top_jam_hash)
+
+    def set_top_jam(self, jam_hash: str):
+        self.top_jam_hash = _normalize_hash(jam_hash)
+
+    def active_instances(self) -> list[SUMOInstance]:
+        return [i for i in self.instances.values() if i.is_running]
+
+    async def start_instance(self, jam_hash: str, sumocfg_path: Optional[Path] = None) -> dict:
+        """Idempotente. LRU eviction si capacidad llena (sin desalojar con clientes)."""
+        norm = _normalize_hash(jam_hash)
+        async with self._lock:
+            existing = self.instances.get(norm)
+            if existing and existing.is_running:
+                return {"ok": True, "status": "already_running", "hash": norm}
+
+            if sumocfg_path is None:
+                sumocfg_path = _resolve_sumocfg(norm) or _resolve_sumocfg(f"waze_{norm}")
+            if sumocfg_path is None or not sumocfg_path.exists():
+                return {"ok": False, "error": "config_not_found", "hash": norm}
+
+            if len(self.active_instances()) >= self.max_instances:
+                evicted = self._evict_lru_unlocked()
+                if evicted is None:
+                    return {
+                        "ok": False,
+                        "error": "all_instances_watched",
+                        "active": len(self.active_instances()),
+                    }
+
+            inst = SUMOInstance(norm, sumocfg_path)
+            ok = inst.start()
+            if not ok:
+                return {"ok": False, "error": "start_failed", "hash": norm}
+            self.instances[norm] = inst
+            return {"ok": True, "status": "started", "hash": norm}
+
+    def _evict_lru_unlocked(self) -> Optional[str]:
+        """Llamar con _lock adquirido. Devuelve hash desalojado o None."""
+        candidates = [
+            i for i in self.instances.values()
+            if not i.clients and i.last_client_disconnect is not None
+        ]
+        if not candidates:
+            return None
+        victim = min(candidates, key=lambda i: i.last_client_disconnect)
+        log.info(f"EVICT LRU: {victim.jam_hash} (sin clientes hace "
+                 f"{round(time.time() - victim.last_client_disconnect, 0)}s)")
+        victim.stop()
+        del self.instances[victim.jam_hash]
+        if self.top_jam_hash == victim.jam_hash:
+            self.top_jam_hash = None
+        return victim.jam_hash
+
+    async def stop_instance(self, jam_hash: str) -> dict:
+        norm = _normalize_hash(jam_hash)
+        async with self._lock:
+            inst = self.instances.get(norm)
+            if inst is None:
+                return {"ok": False, "error": "not_found", "hash": norm}
+            inst.stop()
+            del self.instances[norm]
+            if self.top_jam_hash == norm:
+                self.top_jam_hash = None
+            return {"ok": True, "hash": norm}
+
+    async def inject_into(self, jam_hash: str, target_count: int) -> dict:
+        """Inyecta vehículos en una instancia tomando el lock global TraCI."""
+        inst = self.get_instance(jam_hash)
+        if not inst:
+            return {"injected": 0, "skipped": "not_found"}
+        async with self._lock:
+            return inst.inject_vehicles(target_count)
+
+    async def calibrate_in(
+        self, jam_hash: str, edge_id: str, speed_kmh: float, flow_vph: float = 0
+    ) -> bool:
+        """Calibra un edge en una instancia tomando el lock global TraCI."""
+        inst = self.get_instance(jam_hash)
+        if not inst:
+            return False
+        async with self._lock:
+            return inst.calibrate(edge_id, speed_kmh, flow_vph)
+
+    def get_status(self) -> dict:
+        return {
+            "max_instances": self.max_instances,
+            "active": len(self.active_instances()),
+            "top_jam_hash": self.top_jam_hash,
+            "ttl_seconds": SUMO_INSTANCE_TTL,
+            "instances": [i.status() for i in self.instances.values()],
+        }
+
+    async def housekeeping(self):
+        """Apaga instancias inactivas con TTL excedido."""
+        while True:
+            await asyncio.sleep(HOUSEKEEPING_INTERVAL)
+            try:
+                now = time.time()
+                expired = []
+                for h, inst in list(self.instances.items()):
+                    if (
+                        not inst.clients
+                        and inst.last_client_disconnect is not None
+                        and now - inst.last_client_disconnect > SUMO_INSTANCE_TTL
+                    ):
+                        expired.append(h)
+                for h in expired:
+                    log.info(f"AUTO-SHUTDOWN: {h} sin clientes >{SUMO_INSTANCE_TTL}s")
+                    await self.stop_instance(h)
+            except asyncio.CancelledError:
+                raise
+            except Exception as e:
+                log.warning(f"Error en housekeeping: {e}")
+
+
+# ─────────────────────────────────────────────────────────────────────
+# Globals + lifespan
+# ─────────────────────────────────────────────────────────────────────
+pool = SUMOPool()
 calibrator_instance = None
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     global calibrator_instance
-    network = os.getenv("SUMO_NETWORK", "C3")
-    log.info(f"Iniciando SUMO Engine con red: {network}")
-    controller.start(network)
+    log.info(f"SUMO Engine v3 iniciando — pool vacío "
+             f"(max={SUMO_MAX_INSTANCES}, ttl={SUMO_INSTANCE_TTL}s)")
 
     sim_task = asyncio.create_task(simulation_loop())
+    house_task = asyncio.create_task(pool.housekeeping())
 
     cal_task = None
     try:
         from calibrator import TrafficCalibrator
-        calibrator_instance = TrafficCalibrator(controller)
+        calibrator_instance = TrafficCalibrator(pool)
         cal_task = asyncio.create_task(calibrator_instance.start())
-        log.info("TrafficCalibrator iniciado en background")
+        log.info("TrafficCalibrator iniciado (multi-instancia)")
     except Exception as e:
         log.warning(f"No se pudo iniciar calibrador: {e}")
 
     yield
 
     sim_task.cancel()
+    house_task.cancel()
     if cal_task:
         cal_task.cancel()
-    controller.stop()
+    for h in list(pool.instances.keys()):
+        try:
+            pool.instances[h].stop()
+        except Exception:
+            pass
 
 
 app = FastAPI(
     title="SUMO Engine — VIITS NEXUS",
-    description="Motor de microsimulacion con inyeccion Waze v2",
-    version="2.0.0",
+    description="Motor de microsimulación multi-instancia v3",
+    version="3.0.0",
     lifespan=lifespan,
 )
 
@@ -358,56 +523,76 @@ app.add_middleware(
 )
 
 
+# ─────────────────────────────────────────────────────────────────────
+# Simulation loop
+# ─────────────────────────────────────────────────────────────────────
 async def simulation_loop():
+    try:
+        import orjson
+        def encode(payload): return orjson.dumps(payload)
+        send_method = "send_bytes"
+    except ImportError:
+        def encode(payload): return json.dumps(payload)
+        send_method = "send_text"
+
     while True:
-        if not controller.is_running:
+        try:
+            instances = pool.active_instances()
+            if not instances:
+                await asyncio.sleep(STREAM_INTERVAL)
+                continue
+
+            async with pool._lock:
+                frames: list[tuple[SUMOInstance, dict]] = []
+                for inst in instances:
+                    state = inst.step()
+                    frames.append((inst, state))
+
+            for inst, state in frames:
+                if not inst.clients or not state.get("vehicles"):
+                    continue
+                payload = encode({
+                    "type": "sumo_frame",
+                    "data": state,
+                    "bounds": inst.network_bounds,
+                    "networkId": inst.label,
+                    "jamHash": inst.jam_hash,
+                })
+                disconnected = set()
+                for ws in inst.clients:
+                    try:
+                        await getattr(ws, send_method)(payload)
+                    except Exception:
+                        disconnected.add(ws)
+                for ws in disconnected:
+                    inst.remove_client(ws)
+
+            await asyncio.sleep(STREAM_INTERVAL)
+        except asyncio.CancelledError:
+            raise
+        except Exception as e:
+            log.warning(f"Error en simulation_loop: {e}")
             await asyncio.sleep(1)
-            continue
-
-        state = controller.step()
-
-        if connected_clients and state.get("vehicles"):
-            try:
-                import orjson
-                payload = orjson.dumps({
-                    "type": "sumo_frame",
-                    "data": state,
-                    "bounds": simulation_state.get("network_bounds"),
-                    "networkId": simulation_state.get("network_id"),
-                })
-            except ImportError:
-                payload = json.dumps({
-                    "type": "sumo_frame",
-                    "data": state,
-                    "bounds": simulation_state.get("network_bounds"),
-                    "networkId": simulation_state.get("network_id"),
-                })
-
-            disconnected = set()
-            for ws in connected_clients:
-                try:
-                    await ws.send_bytes(payload) if isinstance(payload, bytes) else await ws.send_text(payload)
-                except Exception:
-                    disconnected.add(ws)
-            connected_clients.difference_update(disconnected)
-
-        await asyncio.sleep(STREAM_INTERVAL)
 
 
+# ─────────────────────────────────────────────────────────────────────
+# Endpoints REST
+# ─────────────────────────────────────────────────────────────────────
 @app.get("/health")
 async def health():
+    actives = pool.active_instances()
     return {
         "status": "ok",
-        "sumo_running": simulation_state["running"],
-        "network": simulation_state["network_id"],
-        "vehicles": simulation_state["vehicle_count"],
-        "step": simulation_state["step"],
+        "pool_active": len(actives),
+        "pool_max": SUMO_MAX_INSTANCES,
+        "top_jam_hash": pool.top_jam_hash,
+        "vehicles_total": sum(i.last_step_vehicles for i in actives),
     }
 
 
 @app.get("/api/state")
 async def get_state():
-    return simulation_state
+    return pool.get_status()
 
 
 @app.get("/api/networks")
@@ -434,34 +619,71 @@ async def list_networks():
     }
 
 
+@app.post("/api/pool/start/{jam_hash}")
+async def pool_start(jam_hash: str):
+    result = await pool.start_instance(jam_hash)
+    if not result.get("ok"):
+        if result.get("error") == "all_instances_watched":
+            raise HTTPException(status_code=503, detail=result)
+        if result.get("error") == "config_not_found":
+            raise HTTPException(status_code=404, detail=result)
+        raise HTTPException(status_code=500, detail=result)
+    return result
+
+
+@app.post("/api/pool/stop/{jam_hash}")
+async def pool_stop(jam_hash: str):
+    result = await pool.stop_instance(jam_hash)
+    if not result.get("ok"):
+        raise HTTPException(status_code=404, detail=result)
+    return result
+
+
+@app.get("/api/pool/status")
+async def pool_status():
+    return pool.get_status()
+
+
 @app.post("/api/switch/{network_id}")
 async def switch_network(network_id: str):
-    log.info(f"Solicitud cambio red: {network_id}")
-    controller.stop()
-
-    cfg_peaje = CONFIG_DIR / f"{network_id}.sumocfg"
-    cfg_waze = CONFIG_DIR / f"waze_{network_id}.sumocfg"
-
-    if cfg_peaje.exists():
-        success = controller.start(network_id)
-    elif cfg_waze.exists():
-        success = controller.start(f"waze_{network_id}")
-    else:
-        return {"ok": False, "error": f"Red '{network_id}' no encontrada"}
-
-    return {"ok": success, "network": network_id, "state": simulation_state}
+    norm = _normalize_hash(network_id)
+    result = await pool.start_instance(norm)
+    if result.get("ok"):
+        pool.set_top_jam(norm)
+    return {"ok": result.get("ok"), "network": network_id, "result": result}
 
 
 @app.post("/api/calibrate")
-async def calibrate_edge(edge_id: str, speed_kmh: float = 60, flow_vph: float = 500):
-    controller.calibrate(edge_id, speed_kmh, flow_vph)
-    return {"ok": True, "edge": edge_id, "speed": speed_kmh, "flow": flow_vph}
+async def calibrate_edge(
+    edge_id: str,
+    speed_kmh: float = 60,
+    flow_vph: float = 500,
+    hash: Optional[str] = None,
+):
+    target_hash = hash if hash else pool.top_jam_hash
+    if not target_hash:
+        raise HTTPException(status_code=404, detail={"error": "no_top_instance"})
+    if pool.get_instance(target_hash) is None:
+        raise HTTPException(
+            status_code=404,
+            detail={"error": "instance_not_found", "hash": target_hash},
+        )
+    ok = await pool.calibrate_in(target_hash, edge_id, speed_kmh, flow_vph)
+    return {"ok": ok, "edge": edge_id, "hash": target_hash}
 
 
 @app.post("/api/inject")
-async def inject_vehicles_endpoint(target: int = 50):
-    result = controller.inject_vehicles(target_count=target)
-    return {"ok": True, "result": result}
+async def inject_vehicles_endpoint(target: int = 50, hash: Optional[str] = None):
+    target_hash = hash if hash else pool.top_jam_hash
+    if not target_hash:
+        raise HTTPException(status_code=404, detail={"error": "no_top_instance"})
+    if pool.get_instance(target_hash) is None:
+        raise HTTPException(
+            status_code=404,
+            detail={"error": "instance_not_found", "hash": target_hash},
+        )
+    result = await pool.inject_into(target_hash, target)
+    return {"ok": True, "hash": target_hash, "result": result}
 
 
 @app.get("/api/calibrator/status")
@@ -471,28 +693,83 @@ async def calibrator_status():
     return {"running": True, **calibrator_instance.get_status()}
 
 
-@app.websocket("/ws/sumo")
-async def sumo_websocket(websocket: WebSocket):
-    await websocket.accept()
-    connected_clients.add(websocket)
-    log.info(f"Cliente conectado — total: {len(connected_clients)}")
+# ─────────────────────────────────────────────────────────────────────
+# WebSockets
+# ─────────────────────────────────────────────────────────────────────
+@app.websocket("/ws/sumo/{jam_hash}")
+async def sumo_ws_by_hash(websocket: WebSocket, jam_hash: str):
+    norm = _normalize_hash(jam_hash)
+    inst = pool.get_instance(norm)
 
-    await websocket.send_json({"type": "sumo_init", "state": simulation_state})
+    if inst is None:
+        # Lazy-start si hay cfg disponible
+        result = await pool.start_instance(norm)
+        if not result.get("ok"):
+            await websocket.accept()
+            await websocket.close(code=4404, reason=f"instance_unavailable:{result.get('error')}")
+            return
+        inst = pool.get_instance(norm)
+
+    await websocket.accept()
+    inst.add_client(websocket)
+    log.info(f"WS conectado a {norm} — clientes: {len(inst.clients)}")
+    await websocket.send_json({
+        "type": "sumo_init",
+        "jamHash": norm,
+        "bounds": inst.network_bounds,
+        "step": inst.step_count,
+    })
 
     try:
         while True:
             data = await websocket.receive_text()
             try:
                 msg = json.loads(data)
-                if msg.get("type") == "calibrate":
-                    controller.calibrate(msg["edgeId"], msg.get("speed", 60), msg.get("flow", 500))
-                elif msg.get("type") == "ping":
+                if msg.get("type") == "ping":
                     await websocket.send_json({"type": "pong"})
             except (json.JSONDecodeError, KeyError):
                 pass
     except WebSocketDisconnect:
-        connected_clients.discard(websocket)
-        log.info(f"Cliente desconectado — total: {len(connected_clients)}")
+        pass
+    finally:
+        inst.remove_client(websocket)
+        log.info(f"WS desconectado de {norm} — clientes restantes: {len(inst.clients)}")
+
+
+@app.websocket("/ws/sumo")
+async def sumo_ws_legacy(websocket: WebSocket):
+    """Legacy sticky: se ata al top_jam_hash al momento de conectar."""
+    inst = pool.get_top_instance()
+    if inst is None:
+        await websocket.accept()
+        await websocket.close(code=4503, reason="no_top_instance_yet")
+        return
+
+    target_hash = inst.jam_hash
+    await websocket.accept()
+    inst.add_client(websocket)
+    log.info(f"WS legacy conectado — sticky a top={target_hash} (clientes: {len(inst.clients)})")
+    await websocket.send_json({
+        "type": "sumo_init",
+        "jamHash": target_hash,
+        "bounds": inst.network_bounds,
+        "step": inst.step_count,
+    })
+
+    try:
+        while True:
+            data = await websocket.receive_text()
+            try:
+                msg = json.loads(data)
+                if msg.get("type") == "ping":
+                    await websocket.send_json({"type": "pong"})
+            except (json.JSONDecodeError, KeyError):
+                pass
+    except WebSocketDisconnect:
+        pass
+    finally:
+        inst.remove_client(websocket)
+        log.info(f"WS legacy desconectado de {target_hash}")
 
 
 if __name__ == "__main__":

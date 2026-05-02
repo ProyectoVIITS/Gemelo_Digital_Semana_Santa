@@ -1,9 +1,13 @@
 /**
- * RoadCanvas v2 — Gemelo digital con vehículos SUMO reales sobre geometría OSM
+ * RoadCanvas v3 — Gemelo digital con vehículos SUMO reales sobre geometría OSM
  *
- * Modo legacy (sin jamHashId / sin polyline): muestra fallback "Sin geometría disponible".
- * Modo activo: conecta a /ws/sumo/{jamHashId} y dibuja polilínea Waze como carretera +
- * vehículos SUMO con color por velocidad y forma por tipo. HUD overlay igual a v1.
+ * Cambios v3 sobre v2:
+ *   - Hash ya NO se calcula localmente. Se resuelve via /api/sumo/find?name=X
+ *     que consulta el calibrador de la VM. Esto evita el mismatch entre el
+ *     hash local (calculado de la polilínea Waze que el frontend ve ahora)
+ *     y el hash real del pool SUMO (calculado en otro tick de polling).
+ *   - Refresh periódico cada 60s (alineado con cache 30s del backend).
+ *   - Cierre 4404 → relookup inmediato + transición de phase.
  */
 import React, { useRef, useEffect, useState, useMemo } from 'react';
 
@@ -11,14 +15,17 @@ const WS_RECONNECT_BASE = 1000;
 const WS_RECONNECT_MAX = 30000;
 const FIRST_FRAME_TIMEOUT = 5000;
 const MAX_VEHICLES_RENDER = 500;
-const PADDING_RATIO = 0.075; // 7.5% por lado = 15% total
+const PADDING_RATIO = 0.075;
+const LOOKUP_BACKOFF_BASE = 1000;
+const LOOKUP_BACKOFF_MAX = 30000;
+const LOOKUP_REFRESH_MS = 60000;
 
 export default function RoadCanvas({
   jamLevel = 3,
   jamSpeed = 10,
   jamRatio = 1,
   polyline = [],
-  jamHashId = null,
+  jamName = null,
   vehicleScale = 1.0,
 }) {
   const canvasRef = useRef(null);
@@ -26,38 +33,115 @@ export default function RoadCanvas({
   const reconnectTimerRef = useRef(null);
   const reconnectDelayRef = useRef(WS_RECONNECT_BASE);
   const firstFrameTimerRef = useRef(null);
+  const lookupBackoffRef = useRef(LOOKUP_BACKOFF_BASE);
+  const lookupRetryTimerRef = useRef(null);
+  const lookupIntervalRef = useRef(null);
   const lastFrameRef = useRef(null);
+  const jamHashIdRef = useRef(null);
 
-  const [wsStatus, setWsStatus] = useState('idle'); // idle | connecting | connected | reconnecting | unavailable
+  // phase: idle | looking-up | not-available | connecting | connected | reconnecting | unavailable
+  const [phase, setPhase] = useState('idle');
+  const [jamHashId, setJamHashId] = useState(null);
+  const [lookupVersion, setLookupVersion] = useState(0);
   const [vehicleCount, setVehicleCount] = useState(0);
   const [step, setStep] = useState(0);
   const [renderTick, setRenderTick] = useState(0);
   const [waitingFirstFrame, setWaitingFirstFrame] = useState(true);
 
-  const hasPolyline = Array.isArray(polyline) && polyline.length > 1;
-  const canConnect = !!jamHashId && hasPolyline;
-
-  // ── 1) WebSocket lifecycle ──────────────────────────────────────────
   useEffect(() => {
-    if (!canConnect) {
-      setWsStatus('idle');
-      setWaitingFirstFrame(false);
-      lastFrameRef.current = null;
+    jamHashIdRef.current = jamHashId;
+  }, [jamHashId]);
+
+  const hasPolyline = Array.isArray(polyline) && polyline.length > 1;
+  const canLookup = !!(jamName && jamName.trim());
+
+  // ── 1) Lookup del hash desde el backend (con refresh periódico) ──
+  useEffect(() => {
+    if (!canLookup) {
+      setPhase('idle');
+      setJamHashId(null);
       setVehicleCount(0);
       setStep(0);
+      lastFrameRef.current = null;
       return undefined;
     }
 
     let cancelled = false;
-    setWsStatus('connecting');
+
+    // Si aún no tenemos hash, mostrar 'looking-up' como estado visible.
+    // Si ya tenemos hash (refresh periódico), no tocamos phase.
+    if (!jamHashIdRef.current) {
+      setPhase('looking-up');
+    }
+
+    const lookup = async () => {
+      if (cancelled) return;
+      try {
+        const url = `${window.location.origin}/api/sumo/find?name=${encodeURIComponent(jamName)}`;
+        const res = await fetch(url);
+        if (cancelled) return;
+        if (res.status === 404) {
+          setPhase('not-available');
+          setJamHashId(null);
+          lastFrameRef.current = null;
+          lookupBackoffRef.current = LOOKUP_BACKOFF_BASE;
+          return;
+        }
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const data = await res.json();
+        if (cancelled) return;
+        if (data && data.found && data.hash) {
+          setJamHashId((prev) => (prev === data.hash ? prev : data.hash));
+          lookupBackoffRef.current = LOOKUP_BACKOFF_BASE;
+        } else {
+          setPhase('not-available');
+          setJamHashId(null);
+          lastFrameRef.current = null;
+        }
+      } catch (_err) {
+        if (cancelled) return;
+        const delay = lookupBackoffRef.current;
+        lookupBackoffRef.current = Math.min(delay * 2, LOOKUP_BACKOFF_MAX);
+        lookupRetryTimerRef.current = setTimeout(() => {
+          lookupRetryTimerRef.current = null;
+          lookup();
+        }, delay);
+      }
+    };
+
+    lookup();
+    lookupIntervalRef.current = setInterval(() => {
+      if (!cancelled) lookup();
+    }, LOOKUP_REFRESH_MS);
+
+    return () => {
+      cancelled = true;
+      if (lookupRetryTimerRef.current) {
+        clearTimeout(lookupRetryTimerRef.current);
+        lookupRetryTimerRef.current = null;
+      }
+      if (lookupIntervalRef.current) {
+        clearInterval(lookupIntervalRef.current);
+        lookupIntervalRef.current = null;
+      }
+    };
+  }, [jamName, canLookup, lookupVersion]);
+
+  // ── 2) WebSocket lifecycle ──────────────────────────────────────────
+  useEffect(() => {
+    if (!jamHashId) return undefined;
+
+    let cancelled = false;
+    setPhase('connecting');
     setWaitingFirstFrame(true);
     lastFrameRef.current = null;
     setVehicleCount(0);
     setStep(0);
+    reconnectDelayRef.current = WS_RECONNECT_BASE;
 
     const scheduleReconnect = () => {
       if (cancelled) return;
-      setWsStatus('reconnecting');
+      setPhase('reconnecting');
       const delay = reconnectDelayRef.current;
       reconnectDelayRef.current = Math.min(delay * 2, WS_RECONNECT_MAX);
       reconnectTimerRef.current = setTimeout(() => {
@@ -74,7 +158,7 @@ export default function RoadCanvas({
       let ws;
       try {
         ws = new WebSocket(url);
-      } catch {
+      } catch (_) {
         scheduleReconnect();
         return;
       }
@@ -88,7 +172,7 @@ export default function RoadCanvas({
 
       ws.onopen = () => {
         if (cancelled) return;
-        setWsStatus('connected');
+        setPhase('connected');
         reconnectDelayRef.current = WS_RECONNECT_BASE;
       };
 
@@ -96,7 +180,7 @@ export default function RoadCanvas({
         if (cancelled) return;
         try {
           const msg = JSON.parse(ev.data);
-          if (msg?.type === 'sumo_frame' && msg.data) {
+          if (msg && msg.type === 'sumo_frame' && msg.data) {
             lastFrameRef.current = msg.data;
             setVehicleCount(msg.data.vehicleCount || 0);
             setStep(msg.data.step || 0);
@@ -107,8 +191,8 @@ export default function RoadCanvas({
               firstFrameTimerRef.current = null;
             }
           }
-        } catch {
-          /* mensaje no-JSON o malformado: ignorar */
+        } catch (_) {
+          /* mensaje no-JSON: ignorar */
         }
       };
 
@@ -116,11 +200,16 @@ export default function RoadCanvas({
         if (cancelled) return;
         wsRef.current = null;
         if (ev.code === 4404) {
-          setWsStatus('unavailable');
+          // Instancia desapareció (eviction LRU, housekeeping, hash cambiado).
+          // Marcar phase y disparar relookup inmediato.
+          setPhase('unavailable');
+          setJamHashId(null);
+          lastFrameRef.current = null;
           if (firstFrameTimerRef.current) {
             clearTimeout(firstFrameTimerRef.current);
             firstFrameTimerRef.current = null;
           }
+          setLookupVersion((v) => v + 1);
           return;
         }
         scheduleReconnect();
@@ -144,16 +233,16 @@ export default function RoadCanvas({
         firstFrameTimerRef.current = null;
       }
       if (wsRef.current) {
-        try { wsRef.current.close(); } catch { /* noop */ }
+        try { wsRef.current.close(); } catch (_) { /* noop */ }
         wsRef.current = null;
       }
     };
-  }, [jamHashId, canConnect]);
+  }, [jamHashId]);
 
-  // ── 2) ResizeObserver: triggea redraw en cambio de tamaño del parent ──
+  // ── 3) ResizeObserver: triggea redraw en cambio de tamaño del parent ──
   useEffect(() => {
     const canvas = canvasRef.current;
-    const parent = canvas?.parentElement;
+    const parent = canvas && canvas.parentElement;
     if (!parent || typeof ResizeObserver === 'undefined') return undefined;
     const ro = new ResizeObserver(() => setRenderTick((c) => c + 1));
     ro.observe(parent);
@@ -165,7 +254,7 @@ export default function RoadCanvas({
     if (!hasPolyline) return null;
     let minLon = Infinity, maxLon = -Infinity, minLat = Infinity, maxLat = -Infinity;
     for (const p of polyline) {
-      if (p?.x == null || p?.y == null) continue;
+      if (p == null || p.x == null || p.y == null) continue;
       if (p.x < minLon) minLon = p.x;
       if (p.x > maxLon) maxLon = p.x;
       if (p.y < minLat) minLat = p.y;
@@ -175,7 +264,7 @@ export default function RoadCanvas({
     return { minLon, maxLon, minLat, maxLat };
   }, [polyline, hasPolyline]);
 
-  // ── 3) Drawing ──────────────────────────────────────────────────────
+  // ── 4) Drawing ──────────────────────────────────────────────────────
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
@@ -198,7 +287,6 @@ export default function RoadCanvas({
     ctx.fillStyle = '#0a0e17';
     ctx.fillRect(0, 0, w, h);
 
-    // Carretera (polilínea Waze) + vehículos SUMO
     if (bbox) {
       const padX = w * PADDING_RATIO;
       const padY = h * PADDING_RATIO;
@@ -226,7 +314,7 @@ export default function RoadCanvas({
       let started = false;
       for (let i = 0; i < polyline.length; i++) {
         const p = polyline[i];
-        if (p?.x == null || p?.y == null) continue;
+        if (p == null || p.x == null || p.y == null) continue;
         const { px, py } = project(p.x, p.y);
         if (!started) { ctx.moveTo(px, py); started = true; }
         else { ctx.lineTo(px, py); }
@@ -241,7 +329,7 @@ export default function RoadCanvas({
           : frame.vehicles;
 
         for (const v of vehicles) {
-          if (v?.lon == null || v?.lat == null) continue;
+          if (v == null || v.lon == null || v.lat == null) continue;
           const { px, py } = project(v.lon, v.lat);
           const speed = typeof v.speed === 'number' ? v.speed : 0;
           let color;
@@ -260,11 +348,9 @@ export default function RoadCanvas({
           len *= vehicleScale;
           wid *= vehicleScale;
 
-          // SUMO angle: 0=N, 90=E, sentido horario.
-          // Canvas: rotate(0) = +X (Este), Y crece hacia abajo.
-          // Para que un vehículo SUMO con angle=0 (rumbo Norte) apunte hacia arriba en canvas,
-          // necesitamos rotación = (sumoAngle - 90) * π/180 (en sistema canvas Y-down).
-          const angleRad = (((v.angle ?? 0) - 90) * Math.PI) / 180;
+          // SUMO angle: 0=N, 90=E (CW). Canvas Y crece hacia abajo.
+          // canvasRot = (sumoAngle - 90) * π / 180 → angle=0 (N) apunta arriba.
+          const angleRad = (((v.angle == null ? 0 : v.angle) - 90) * Math.PI) / 180;
           ctx.save();
           ctx.translate(px, py);
           ctx.rotate(angleRad);
@@ -288,7 +374,7 @@ export default function RoadCanvas({
     const topRight = `⚡ VELOCIDAD VÍA: ${speedText}  |  🕒 EXCESO: ${ratioText}`;
     ctx.fillText(topRight, w - 240, 18);
 
-    // Bottom-left: contador de vehículos + paso de simulación
+    // Bottom-left: contador
     ctx.fillStyle = '#64748b';
     ctx.font = "9px 'JetBrains Mono', monospace";
     ctx.fillText(`${vehicleCount} vehículos · paso ${step}`, 12, h - 12);
@@ -296,15 +382,21 @@ export default function RoadCanvas({
     // Bottom-right: estado del WebSocket
     let statusEmoji = '⚪';
     let statusText = 'sin vía';
-    switch (wsStatus) {
-      case 'connected':    statusEmoji = '🟢'; statusText = 'SUMO live';        break;
+    switch (phase) {
+      case 'connected':
+        statusEmoji = '🟢'; statusText = 'SUMO live'; break;
       case 'connecting':
-      case 'reconnecting': statusEmoji = '🟡'; statusText = 'reconectando...';  break;
-      case 'unavailable':  statusEmoji = '🔴'; statusText = 'no disponible';    break;
-      case 'idle':         statusEmoji = '⚪'; statusText = 'sin vía';          break;
-      default: break;
+      case 'reconnecting':
+      case 'looking-up':
+        statusEmoji = '🟡'; statusText = 'conectando...'; break;
+      case 'not-available':
+      case 'unavailable':
+        statusEmoji = '🔴'; statusText = 'no disponible'; break;
+      case 'idle':
+      default:
+        statusEmoji = '⚪'; statusText = 'sin vía'; break;
     }
-    if (canConnect || wsStatus !== 'idle') {
+    if (canLookup || phase !== 'idle') {
       const statusLabel = `${statusEmoji} ${statusText}`;
       const m = ctx.measureText(statusLabel);
       ctx.fillText(statusLabel, w - m.width - 12, h - 12);
@@ -314,16 +406,16 @@ export default function RoadCanvas({
   }, [
     renderTick, polyline, bbox, vehicleScale,
     jamLevel, jamSpeed, jamRatio,
-    wsStatus, vehicleCount, step, canConnect,
+    phase, vehicleCount, step, canLookup,
   ]);
 
-  // ── Mensaje de fallback overlay (HTML, no canvas) ──
+  // ── Mensaje overlay HTML ──
   let fallbackMessage = null;
-  if (!canConnect) {
+  if (!canLookup || !hasPolyline) {
     fallbackMessage = 'Sin geometría disponible';
-  } else if (wsStatus === 'unavailable') {
+  } else if (phase === 'not-available' || phase === 'unavailable') {
     fallbackMessage = 'Gemelo digital no disponible para esta vía';
-  } else if (!lastFrameRef.current && !waitingFirstFrame) {
+  } else if (!lastFrameRef.current && !waitingFirstFrame && phase !== 'looking-up') {
     fallbackMessage = 'Esperando gemelo digital...';
   }
 

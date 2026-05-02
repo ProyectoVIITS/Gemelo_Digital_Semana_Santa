@@ -14,7 +14,6 @@ import { getColombiaHour } from '../../utils/operationMode';
 import CongestionForecast from '../../components/shared/CongestionForecast';
 import { useTrafficStore } from '../../store/trafficStore';
 import RoadCanvas from './components/RoadCanvas';
-import { computeJamHash } from '../../utils/jamHash';
 
 const CARD = { backgroundColor: 'rgba(13, 26, 46, 0.6)', borderColor: '#1a2d4a' };
 
@@ -242,7 +241,7 @@ export default function WazeSegmentPage() {
                    jamSpeed={data.metrics.avgSpeed || 5}
                    jamRatio={ratio === '?' ? 1 : parseFloat(ratio)}
                    polyline={jam.line || []}
-                   jamHashId={jam.line?.length ? computeJamHash(jam) : null}
+                   jamName={jam.name || null}
                  />
               </div>
             </div>

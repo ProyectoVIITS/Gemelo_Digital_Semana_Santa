@@ -7,6 +7,10 @@
  *   - WS /ws/sumo legacy → upstream eager (siempre conectado, sticky al top)
  *   - Grace period 30s tras desconexión del último cliente de un hash
  *   - Endpoint REST /api/sumo/pool (proxy a /api/pool/status de la VM)
+ *   - Endpoint REST /api/sumo/find?name=X → resuelve nombre Waze → hash actual
+ *     en pool (con cache 30s para no saturar la VM)
+ *   - Cierre 4404 del upstream se propaga a clientes y NO se reintenta
+ *   - Timeout proxyHttpGet 5s → 10s (cold-start de VM puede tomar más)
  *
  * Exporta 2 funciones separadas por timing:
  *   - initSumoProxyRoutes(app)       → llamar ANTES del SPA fallback
@@ -78,9 +82,22 @@ function connectUpstreamFor(u) {
     }
   });
 
-  ws.on('close', (code) => {
+  ws.on('close', (code, reason) => {
     u.connected = false;
     u.ws = null;
+
+    // 4404: instancia no disponible en VM. Propagar a clientes y NO reintentar.
+    if (code === 4404) {
+      const reasonStr = (reason && reason.toString()) || 'instance_unavailable';
+      console.warn(`[SUMO-Proxy] Upstream ${u.hash} 4404 (${reasonStr}). Cerrando ${u.clients.size} cliente(s).`);
+      for (const client of u.clients) {
+        try { client.close(4404, reasonStr); } catch (_) {}
+      }
+      u.clients.clear();
+      teardownUpstream(u);
+      return;
+    }
+
     if (u.shuttingDown) return;
     console.warn(`[SUMO-Proxy] Upstream ${u.hash} cerrado (code=${code}). Reintento en ${u.reconnectDelay}ms`);
     u.reconnectTimer = setTimeout(() => {
@@ -150,11 +167,11 @@ function detachClient(u, ws) {
   }
 }
 
-function proxyHttpGet(targetPath) {
+function proxyHttpGet(targetPath, timeoutMs = 10000) {
   return new Promise((resolve, reject) => {
     const url = `${SUMO_VM_HTTP}${targetPath}`;
     const lib = url.startsWith('https') ? https : http;
-    const req = lib.get(url, { timeout: 5000 }, (res) => {
+    const req = lib.get(url, { timeout: timeoutMs }, (res) => {
       let data = '';
       res.on('data', (chunk) => data += chunk);
       res.on('end', () => {
@@ -165,6 +182,33 @@ function proxyHttpGet(targetPath) {
     req.on('error', reject);
     req.on('timeout', () => { req.destroy(); reject(new Error('timeout')); });
   });
+}
+
+// ── Cache de top_jams (compartido entre /api/sumo/find y posibles consumers) ──
+const TOP_JAMS_TTL_MS = 30000;
+let topJamsCache = null;
+let topJamsCacheAt = 0;
+let topJamsInflight = null;
+
+async function getTopJamsCached() {
+  const now = Date.now();
+  if (topJamsCache && now - topJamsCacheAt < TOP_JAMS_TTL_MS) return topJamsCache;
+  if (topJamsInflight) return topJamsInflight;
+  topJamsInflight = (async () => {
+    try {
+      const r = await proxyHttpGet('/api/calibrator/status');
+      if (r.status !== 200 || !r.body || typeof r.body !== 'object') {
+        throw new Error(`calibrator returned ${r.status}`);
+      }
+      const top = Array.isArray(r.body.top_jams) ? r.body.top_jams : [];
+      topJamsCache = top;
+      topJamsCacheAt = Date.now();
+      return top;
+    } finally {
+      topJamsInflight = null;
+    }
+  })();
+  return topJamsInflight;
 }
 
 // ── FASE 1: Rutas REST (registrar ANTES del SPA fallback) ─────
@@ -207,6 +251,38 @@ function initSumoProxyRoutes(app) {
     } catch (err) {
       res.status(503).json({ error: 'sumo_unavailable', detail: err.message });
     }
+  });
+
+  // Resuelve nombre Waze → hash actual en el pool de la VM. Express decodifica
+  // query params auto (req.query.name viene con tildes/acentos ya resueltos).
+  app.get('/api/sumo/find', async (req, res) => {
+    res.setHeader('Access-Control-Allow-Origin', '*');
+    const name = (req.query.name || '').toString().trim();
+    if (!name) return res.status(400).json({ error: 'missing_name' });
+
+    let topJams;
+    try {
+      topJams = await getTopJamsCached();
+    } catch (err) {
+      return res.status(503).json({ error: 'sumo_unavailable', detail: err.message });
+    }
+
+    let match = topJams.find((j) => j.name === name);
+    if (!match) {
+      const norm = name.toLowerCase();
+      match = topJams.find((j) => (j.name || '').toLowerCase().trim() === norm);
+    }
+    if (!match) {
+      return res.status(404).json({ found: false, name, top_size: topJams.length });
+    }
+    return res.json({
+      found: true,
+      hash: match.hash,
+      name: match.name,
+      score: match.score,
+      level: match.level,
+      length_m: match.length_m,
+    });
   });
 
   app.get('/api/sumo/health', async (req, res) => {

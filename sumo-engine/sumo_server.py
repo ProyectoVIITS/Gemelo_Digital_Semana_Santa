@@ -42,7 +42,7 @@ CONFIG_DIR = Path(__file__).parent / "config"
 STEP_LENGTH = float(os.getenv("SUMO_STEP_LENGTH", "0.5"))
 STREAM_INTERVAL = float(os.getenv("STREAM_INTERVAL", "0.5"))
 MAX_VEHICLES = int(os.getenv("MAX_VEHICLES", "5000"))
-SUMO_MAX_INSTANCES = int(os.getenv("SUMO_MAX_INSTANCES", "10"))
+SUMO_MAX_INSTANCES = int(os.getenv("SUMO_MAX_INSTANCES", "15"))
 SUMO_INSTANCE_TTL = float(os.getenv("SUMO_INSTANCE_TTL", "600"))
 HOUSEKEEPING_INTERVAL = float(os.getenv("HOUSEKEEPING_INTERVAL", "60"))
 

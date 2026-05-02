@@ -3,7 +3,9 @@ Calibrador Dinamico v4 — Multi-Instancia
 ═════════════════════════════════════════════════════════════════
 Cambios v4 sobre v3:
   - Habla directamente con SUMOPool (no más adapter sync)
-  - Top N jams por score (jamLevel × km) → todos arrancan instancia
+  - Top N jams por score (delay_ratio × km) → todos arrancan instancia
+    delay_ratio = time / historicTime (multiplicador visible en frontend).
+    Fallback a (jamLevel × km) si historicTime ≤ 0 o no existe.
   - Inyecta densidad en TODAS las instancias activas (no solo en el #1)
   - pool.set_top_jam(top_hash) para que /ws/sumo legacy apunte ahí
   - Toll data se trackea para status pero NO se calibra en TraCI
@@ -33,7 +35,7 @@ SCRIPTS_DIR = Path(__file__).parent / "scripts"
 WAZE_MANIFEST_PATH = NETWORK_DIR / "waze_segments" / "manifest.json"
 
 REGEN_INTERVAL = float(os.getenv("REGEN_INTERVAL", "600"))
-TOP_N_JAMS = int(os.getenv("TOP_N_JAMS", "10"))
+TOP_N_JAMS = int(os.getenv("TOP_N_JAMS", "20"))
 
 DENSITY_BY_JAMLEVEL = {
     0: 20,
@@ -148,7 +150,21 @@ class TrafficCalibrator:
             jam_length = jam.get("length", 0)
             jam_name = jam.get("name", "Tramo")
             jam_speed = self._estimate_jam_speed(jam)
-            score = jam_level * (jam_length / 1000)
+
+            # Score híbrido: delay_ratio × km cuando hay datos históricos,
+            # fallback a jamLevel × km en caso contrario. delay_ratio es el
+            # mismo multiplicador que el frontend muestra en la tabla.
+            jam_time = jam.get("time", 0)
+            jam_historic = jam.get("historicTime", 0)
+            if jam_historic and jam_historic > 0:
+                delay_ratio = jam_time / jam_historic
+                score = delay_ratio * (jam_length / 1000)
+                score_source = "delay"
+            else:
+                delay_ratio = None
+                score = jam_level * (jam_length / 1000)
+                score_source = "level"
+
             has_network = jam_hash in available
 
             self.last_waze_data[jam_id] = {
@@ -156,10 +172,13 @@ class TrafficCalibrator:
                 "speed_kmh": jam_speed,
                 "jamLevel": jam_level,
                 "length_m": jam_length,
-                "time_s": jam.get("time", 0),
+                "time_s": jam_time,
+                "historic_time_s": jam_historic,
+                "delay_ratio": round(delay_ratio, 2) if delay_ratio is not None else None,
                 "hash_id": jam_hash,
                 "has_network": has_network,
                 "score": round(score, 2),
+                "score_source": score_source,
             }
 
             if has_network:
@@ -169,6 +188,8 @@ class TrafficCalibrator:
                     "level": jam_level,
                     "length_m": jam_length,
                     "score": score,
+                    "score_source": score_source,
+                    "delay_ratio": delay_ratio,
                 })
 
         jams_ranked.sort(key=lambda j: j["score"], reverse=True)
@@ -211,9 +232,14 @@ class TrafficCalibrator:
         top_hash = top_jams[0]["hash"]
         previous_top = self.pool.top_jam_hash
         if previous_top != top_hash:
+            top_meta = top_jams[0]
+            extras = []
+            if top_meta.get("delay_ratio") is not None:
+                extras.append(f"delay={top_meta['delay_ratio']:.1f}x")
+            extras.append(f"src={top_meta.get('score_source', '?')}")
             log.info(
                 f"TOP cambia: {previous_top} → {top_hash} "
-                f"({top_jams[0]['name'][:40]}, score={top_jams[0]['score']:.1f})"
+                f"({top_meta['name'][:40]}, score={top_meta['score']:.1f}, {', '.join(extras)})"
             )
             self.pool.set_top_jam(top_hash)
 

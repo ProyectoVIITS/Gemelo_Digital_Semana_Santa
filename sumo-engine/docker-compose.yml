@@ -26,6 +26,8 @@ services:
       - MAX_VEHICLES=5000
       - NEXUS_BACKEND_URL=https://gemelo-digital-nexus-ditra.onrender.com
       - CALIBRATOR_INTERVAL=30
+      - SUMO_MAX_INSTANCES=15
+      - TOP_N_JAMS=20
     volumes:
       - ./networks:/app/networks
       - ./config:/app/config

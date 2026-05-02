@@ -14,7 +14,7 @@ const express = require('express');
 const path = require('path');
 const os = require('os');
 const { initWebSocketServer } = require('./backend/websocketServer');
-const { initSumoProxy } = require('./backend/sumoProxy');
+const { initSumoProxyRoutes, initSumoProxyWebSocket } = require('./backend/sumoProxy');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -71,7 +71,7 @@ app.get('/api/traffic/snapshot', (req, res) => {
 });
 
 // ── Inicializar proxy SUMO antes del SPA fallback ──
-initSumoProxy(server, app);
+initSumoProxyRoutes(app);
 
 // ── Static files with aggressive caching for assets ──
 app.use('/static', express.static(path.join(BUILD_DIR, 'static'), {
@@ -100,6 +100,7 @@ const server = app.listen(PORT, '0.0.0.0', () => {
 
 // Init WS
 initWebSocketServer(server);
+initSumoProxyWebSocket(server);
 
 // ── Graceful shutdown ──
 process.on('SIGTERM', () => {

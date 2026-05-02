@@ -70,6 +70,9 @@ app.get('/api/traffic/snapshot', (req, res) => {
   }
 });
 
+// ── Inicializar proxy SUMO antes del SPA fallback ──
+initSumoProxy(server, app);
+
 // ── Static files with aggressive caching for assets ──
 app.use('/static', express.static(path.join(BUILD_DIR, 'static'), {
   maxAge: '1y',
@@ -97,7 +100,6 @@ const server = app.listen(PORT, '0.0.0.0', () => {
 
 // Init WS
 initWebSocketServer(server);
-initSumoProxy(server, app);
 
 // ── Graceful shutdown ──
 process.on('SIGTERM', () => {

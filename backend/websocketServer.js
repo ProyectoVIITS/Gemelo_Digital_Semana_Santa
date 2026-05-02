@@ -5,7 +5,17 @@ const path = require('path');
 const { startPoller, getStore, getTopWazeJams } = require('./services/trafficPoller');
 
 function initWebSocketServer(server) {
-  const wss = new WebSocketServer({ server, path: '/api/traffic' });
+  const wss = new WebSocketServer({ noServer: true });
+
+  server.on('upgrade', (request, socket, head) => {
+    const { URL } = require('url');
+    const url = new URL(request.url, 'http://' + request.headers.host);
+    if (url.pathname === '/api/traffic') {
+      wss.handleUpgrade(request, socket, head, (ws) => {
+        wss.emit('connection', ws, request);
+      });
+    }
+  });
   
   startPoller(wss);
 

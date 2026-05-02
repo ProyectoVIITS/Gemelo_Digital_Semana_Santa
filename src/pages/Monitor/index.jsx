@@ -666,9 +666,51 @@ function AccidentLegend({ accData }) {
 function AlertaDITRA({ corridorData }) {
   const wazeJams = useTrafficStore(state => state.nationalWazeJams) || [];
   const hour = getColombiaHour();
-  
+
   // Siempre visible, diseño de centro de comando
   const isPeakAlert = hour >= 16 && hour <= 20;
+
+  // Cross-reference: la tabla muestra solo jams que están en el pool SUMO
+  // (top_jams del calibrador). Datos completos (time, line, uuid) se toman
+  // del store nationalWazeJams matcheando por nombre. Si /api/sumo/calibrator
+  // falla o el pool está vacío → fallback al snapshot completo.
+  const [poolTop, setPoolTop] = useState(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    const fetchPool = async () => {
+      try {
+        const res = await fetch('/api/sumo/calibrator');
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const data = await res.json();
+        if (cancelled) return;
+        setPoolTop(Array.isArray(data?.top_jams) ? data.top_jams : []);
+      } catch (_) {
+        if (cancelled) return;
+        setPoolTop(null);
+      }
+    };
+    fetchPool();
+    const id = setInterval(fetchPool, 30000);
+    return () => { cancelled = true; clearInterval(id); };
+  }, []);
+
+  const displayJams = useMemo(() => {
+    if (!poolTop || poolTop.length === 0) return wazeJams;
+    const norm = (s) => (s || '').toLowerCase().trim();
+    const byName = new Map();
+    const byNormName = new Map();
+    for (const j of wazeJams) {
+      if (j?.name) {
+        byName.set(j.name, j);
+        byNormName.set(norm(j.name), j);
+      }
+    }
+    const matched = poolTop
+      .map((p) => byName.get(p.name) || byNormName.get(norm(p.name)))
+      .filter(Boolean);
+    return matched.length > 0 ? matched : wazeJams;
+  }, [poolTop, wazeJams]);
 
   // Top corredores VIITS por IRT
   const topCorridors = NEXUS_CORRIDORS
@@ -706,7 +748,7 @@ function AlertaDITRA({ corridorData }) {
             <div className="px-2 py-0.5 rounded text-[8px] tracking-widest font-bold bg-white/10 text-white/90">LIVE</div>
           </div>
           <div className="text-[10px] text-slate-400 tracking-wide mt-0.5 font-mono">
-            Radar Inteligente Gemelo Digital - Ministerio de Transporte · Datos Sincronizados · Top Nacional ({wazeJams.length} incidentes críticos)
+            Radar Inteligente Gemelo Digital - Ministerio de Transporte · Datos Sincronizados · Top Nacional ({displayJams.length} incidentes críticos)
           </div>
         </div>
       </div>
@@ -738,13 +780,13 @@ function AlertaDITRA({ corridorData }) {
           </div>
         </div>
         <div className="space-y-1.5">
-          {wazeJams.length === 0 ? (
+          {displayJams.length === 0 ? (
             <div className="text-center py-6 px-4 border border-dashed rounded-lg border-slate-700/50 bg-slate-800/20">
               <span className="text-slate-400 text-xs tracking-widest uppercase">
                 ✅ Sin congestión crítica a nivel nacional en este momento
               </span>
             </div>
-          ) : wazeJams.map((jam, i) => {
+          ) : displayJams.map((jam, i) => {
               const colaKm = ((jam.length || 0) / 1000).toFixed(1);
               const tiempoMin = Math.round((jam.time || 0) / 60);
             

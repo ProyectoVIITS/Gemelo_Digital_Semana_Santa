@@ -14,6 +14,7 @@ const express = require('express');
 const path = require('path');
 const os = require('os');
 const { initWebSocketServer } = require('./backend/websocketServer');
+const { initSumoProxy } = require('./backend/sumoProxy');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -96,6 +97,7 @@ const server = app.listen(PORT, '0.0.0.0', () => {
 
 // Init WS
 initWebSocketServer(server);
+initSumoProxy(server, app);
 
 // ── Graceful shutdown ──
 process.on('SIGTERM', () => {

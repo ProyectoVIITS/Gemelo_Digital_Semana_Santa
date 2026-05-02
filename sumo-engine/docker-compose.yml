@@ -24,7 +24,7 @@ services:
       - SUMO_STEP_LENGTH=0.5
       - STREAM_INTERVAL=0.5
       - MAX_VEHICLES=5000
-      - NEXUS_BACKEND_URL=http://host.docker.internal:3000
+      - NEXUS_BACKEND_URL=https://gemelo-digital-nexus-ditra.onrender.com
       - CALIBRATOR_INTERVAL=30
     volumes:
       - ./networks:/app/networks
@@ -38,8 +38,8 @@ services:
     deploy:
       resources:
         limits:
-          cpus: "2.0"
-          memory: 2G
+          cpus: "3.5"
+          memory: 12G
         reservations:
           cpus: "0.5"
           memory: 512M

@@ -25,3 +25,15 @@ yarn-error.log*
 logs/
 
 .vercel
+
+# SUMO Engine - archivos generados y backups
+sumo-engine/networks/waze_segments/
+sumo-engine/networks/*.osm
+sumo-engine/config/waze_*.sumocfg
+sumo-engine/*.backup*
+sumo-engine/*.save
+sumo-engine/scripts/*.backup
+sumo-engine/scripts/*.save
+sumo-engine/__pycache__/
+sumo-engine/scripts/__pycache__/
+*.pyc

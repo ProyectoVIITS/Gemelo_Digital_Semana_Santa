@@ -159,7 +159,6 @@ def convert_to_sumo_net(jam_id: str, osm_file: Path, output_dir: Path) -> Path:
         "--ramps.guess", "true",
         "--roundabouts.guess", "true",
         "--junctions.join", "true",
-        "--osm.speedlimit-usage", "true",
         "--junctions.corner-detail", "5",
         "--output.street-names", "true",
         "--output.original-names", "true",

@@ -14,7 +14,7 @@ ENV PATH="${SUMO_HOME}/bin:${PATH}"
 RUN apt-get update && apt-get install -y --no-install-recommends \
     software-properties-common \
     python3.11 python3.11-venv python3-pip \
-    wget curl ca-certificates \
+    wget curl ca-certificates gnupg dirmngr \
     && add-apt-repository ppa:sumo/stable \
     && apt-get update \
     && apt-get install -y --no-install-recommends sumo sumo-tools \

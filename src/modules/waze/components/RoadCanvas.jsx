@@ -495,6 +495,14 @@ export default function RoadCanvas({
         const offsetX = (w - drawnW) / 2;
         const offsetY = (h - drawnH) / 2;
 
+        // Escala dinámica de vehículos según px/metro reales del canvas.
+        // Evita "amontonamiento" en vías largas y desaparición en vías cortas.
+        // 1° lat = 111320 m. En Colombia 1° lon ≈ 111320 × cos(lat) — diferencia
+        // <2.2%, aceptable usar 111320 directo. Independiente de vehicleScale.
+        const pixelsPerMeter = scale / 111320;
+        const targetCarPixelLength = Math.max(3.5, 4.5 * pixelsPerMeter); // 4.5m = car típico
+        const dynamicVehicleScale = Math.max(0.2, Math.min(3.0, targetCarPixelLength / 18));
+
         const project = (lon, lat) => ({
           px: (lon - bb.minLon) * scale + offsetX,
           py: h - ((lat - bb.minLat) * scale + offsetY),
@@ -571,7 +579,7 @@ export default function RoadCanvas({
             const proj = project(lon, lat);
             const angleRad = ((angle - 90) * Math.PI) / 180;
             const color = colorForVehicle(v.id);
-            drawVehicle(ctx, proj.px, proj.py, angleRad, v.type, color, speed, props.vehicleScale);
+            drawVehicle(ctx, proj.px, proj.py, angleRad, v.type, color, speed, props.vehicleScale * dynamicVehicleScale);
           }
         }
       }

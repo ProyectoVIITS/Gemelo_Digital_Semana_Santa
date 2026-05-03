@@ -46,36 +46,8 @@ function lerpAngle(a, b, t) {
   return a + diff * t;
 }
 
-// Snap un punto (vpx, vpy) en pixel space a la polilínea. Devuelve la
-// arc-length acumulada (distancia desde el inicio de la polilínea) y la
-// dirección normalizada del segmento más cercano.
-function pointToArc(vpx, vpy, segs) {
-  if (!segs || segs.length === 0) return { arc: 0, dirNx: 1, dirNy: 0 };
-  let bestD2 = Infinity;
-  let bestArc = 0;
-  let bestDirNx = segs[0].dirNx;
-  let bestDirNy = segs[0].dirNy;
-  for (let i = 0; i < segs.length; i++) {
-    const s = segs[i];
-    let t = ((vpx - s.ax) * s.dx + (vpy - s.ay) * s.dy) / s.len2;
-    if (t < 0) t = 0;
-    else if (t > 1) t = 1;
-    const cx = s.ax + t * s.dx;
-    const cy = s.ay + t * s.dy;
-    const ddx = vpx - cx;
-    const ddy = vpy - cy;
-    const d2 = ddx * ddx + ddy * ddy;
-    if (d2 < bestD2) {
-      bestD2 = d2;
-      bestArc = s.cumPrev + t * s.len;
-      bestDirNx = s.dirNx;
-      bestDirNy = s.dirNy;
-    }
-  }
-  return { arc: bestArc, dirNx: bestDirNx, dirNy: bestDirNy };
-}
-
-// Inverso: dado un arc-length, devuelve el (px, py) y la dirección local.
+// Dado un arc-length (distancia desde el inicio de la polilínea), devuelve
+// el (px, py) en canvas y la dirección normalizada del segmento local.
 function arcToPoint(arc, segs, totalLen) {
   if (!segs || segs.length === 0) return { px: 0, py: 0, dirNx: 1, dirNy: 0 };
   if (arc <= 0) {
@@ -161,9 +133,12 @@ export default function RoadCanvas({
   // path: Path2D del asfalto. segs: segmentos en pixels para snap-to-polyline
   // (con cumPrev/len/dirN precomputados). totalLen: arc-length total.
   const polylinePathRef = useRef({ key: null, path: null, segs: null, totalLen: 0 });
-  // Estado visual por vehículo: arc actual, velocidad, timestamp del frame WS sincronizado.
-  // Permite mostrar la cola "fluyendo" entre frames SUMO con visualAmp.
-  const vehicleStateRef = useRef(new Map());
+  // Cola sintetizada (Opción C): N slots distribuidos uniformemente sobre la
+  // polilínea, todos avanzando como un cinturón. N = vehicleCount de SUMO.
+  // Tipos asignados por proporción real (SUMO inyecta 65% car, 20% moto,
+  // 10% truck, 5% bus). Mantenemos solo la lista de tipos por slot — el
+  // arc se computa cada tick desde slotIdx*spacing + globalOffset.
+  const queueRef = useRef({ types: [], offset: 0 });
   const lastTickTimeRef = useRef(0);
 
   // State (re-renderiza JSX y fallback overlay)
@@ -545,9 +520,9 @@ export default function RoadCanvas({
             prevPt = proj;
           }
           polylinePathRef.current = { key: pathKey, path, segs, totalLen: cumLen };
-          // Invalida los arcs cacheados de vehículos (ya no son consistentes
-          // con los nuevos segmentos en pixel-space).
-          vehicleStateRef.current.clear();
+          // La cola sintetizada se reinicia con la nueva geometría.
+          queueRef.current.types = [];
+          queueRef.current.offset = 0;
         }
         const path = polylinePathRef.current.path;
         const polySegs = polylinePathRef.current.segs;
@@ -579,66 +554,60 @@ export default function RoadCanvas({
         ctx.lineJoin = 'round';
         ctx.stroke(path);
 
-        // Vehículos: snap a la polilínea (Opción B).
-        // Cada vehículo SUMO se proyecta al punto más cercano de la polilínea
-        // y se orienta según la tangente local. Entre frames WS, el arc
-        // avanza visualmente a velocidad SUMO × visualAmp para que la cola
-        // se vea fluir incluso a 9 km/h reales (donde el movimiento sería
-        // sub-pixel). Cada nuevo frame WS hace sync suave 70/30 contra la
-        // posición SUMO real (evita teleport, mantiene tendencia visual).
+        // Vehículos: cola sintetizada en cinturón (Opción C).
+        // N slots uniformemente espaciados sobre la polilínea, avanzando en
+        // bloque a velocidad visual proporcional al avg Waze. N = vehicleCount
+        // SUMO. Tipos por slot estables (asignados por proporción 65/20/10/5
+        // que SUMO usa al inyectar). Wrap continuo: cuando un slot pasa el
+        // final, reaparece al inicio (el arc se calcula con módulo).
         const curr = currFrameRef.current;
-        if (curr && Array.isArray(curr.vehicles) && polySegs && polySegs.length > 0) {
+        if (curr && polySegs && polySegs.length > 0 && polyTotalLen > 0) {
           const nowMs = performance.now();
           const lastTick = lastTickTimeRef.current || nowMs;
-          const dt = Math.min(0.1, (nowMs - lastTick) / 1000); // cap dt 100ms
+          const dt = Math.min(0.1, (nowMs - lastTick) / 1000);
           lastTickTimeRef.current = nowMs;
 
-          const VISUAL_AMP = 3;
-          const frameStamp = frameReceivedAtRef.current;
-          const stateMap = vehicleStateRef.current;
+          const VISUAL_AMP_C = 4;
+          const targetN = Math.min(
+            MAX_VEHICLES_RENDER,
+            Array.isArray(curr.vehicles) ? curr.vehicles.length : 0,
+          );
 
-          const vehicles = curr.vehicles.length > MAX_VEHICLES_RENDER
-            ? curr.vehicles.slice(0, MAX_VEHICLES_RENDER)
-            : curr.vehicles;
-
-          const presentIds = new Set();
-          for (const v of vehicles) {
-            if (v == null || v.lon == null || v.lat == null) continue;
-            presentIds.add(v.id);
-
-            const proj = project(v.lon, v.lat);
-            const sumoSnap = pointToArc(proj.px, proj.py, polySegs);
-
-            let state = stateMap.get(v.id);
-            if (!state) {
-              // Primer avistamiento: arrancar exactamente donde SUMO lo puso
-              state = {
-                arc: sumoSnap.arc,
-                speed: typeof v.speed === 'number' ? v.speed : 0,
-                stamp: frameStamp,
-              };
-              stateMap.set(v.id, state);
-            } else if (state.stamp !== frameStamp) {
-              // Nuevo frame WS: sync suave 70% visual / 30% SUMO real
-              state.arc = state.arc * 0.7 + sumoSnap.arc * 0.3;
-              state.speed = typeof v.speed === 'number' ? v.speed : state.speed;
-              state.stamp = frameStamp;
-            }
-
-            // Avance visual continuo (simula la cola creciendo)
-            const speedMps = state.speed / 3.6;
-            state.arc += speedMps * dt * VISUAL_AMP * pixelsPerMeter;
-            if (state.arc > polyTotalLen) state.arc = polyTotalLen;
-            else if (state.arc < 0) state.arc = 0;
-
-            const point = arcToPoint(state.arc, polySegs, polyTotalLen);
-            const angleRad = Math.atan2(point.dirNy, point.dirNx);
-            drawVehicle(ctx, point.px, point.py, angleRad, v.type, props.vehicleScale * dynamicVehicleScale);
+          const queue = queueRef.current;
+          // Ajustar tamaño de la cola al count actual SUMO
+          while (queue.types.length < targetN) {
+            // Distribución 65% car / 20% moto / 10% truck / 5% bus
+            const r = Math.random();
+            let t;
+            if (r < 0.65) t = 'car';
+            else if (r < 0.85) t = 'moto';
+            else if (r < 0.95) t = 'truck';
+            else t = 'bus';
+            queue.types.push(t);
+          }
+          while (queue.types.length > targetN) {
+            queue.types.pop();
           }
 
-          // Cleanup: drop estados de vehículos que ya no están en el frame
-          for (const vid of Array.from(stateMap.keys())) {
-            if (!presentIds.has(vid)) stateMap.delete(vid);
+          if (queue.types.length > 0) {
+            // Avance global del cinturón
+            const avgKmh = props.jamSpeed > 0 ? props.jamSpeed : 5;
+            const avgMps = avgKmh / 3.6;
+            queue.offset += avgMps * dt * VISUAL_AMP_C * pixelsPerMeter;
+            // Mantener offset acotado para evitar drift numérico tras horas
+            if (queue.offset > 1e9) queue.offset %= polyTotalLen;
+
+            const spacing = polyTotalLen / queue.types.length;
+            const drawScale = props.vehicleScale * dynamicVehicleScale;
+
+            for (let i = 0; i < queue.types.length; i++) {
+              // Arc del slot i: (i × spacing + offset) mod totalLen
+              let arc = (i * spacing + queue.offset) % polyTotalLen;
+              if (arc < 0) arc += polyTotalLen;
+              const point = arcToPoint(arc, polySegs, polyTotalLen);
+              const angleRad = Math.atan2(point.dirNy, point.dirNx);
+              drawVehicle(ctx, point.px, point.py, angleRad, queue.types[i], drawScale);
+            }
           }
         }
       }

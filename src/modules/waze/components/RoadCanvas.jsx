@@ -27,17 +27,20 @@ const FRAME_PERIOD_MS = 500;
 const RELOOKUP_AFTER_4404_MS = 5000;
 
 // Vehículo con detalle: chasis coloreado por tipo + techo, parabrisas,
-// luces y glow. Dimensiones bumpeadas +15% sobre la versión minimalista.
+// luces y glow. Dimensiones bumpeadas +30% sobre la versión previa.
 const TYPE_SPEC = {
-  car:   { len: 21, wid: 9, color: '#3b82f6' }, // azul
-  truck: { len: 32, wid: 7, color: '#ef4444' }, // rojo
-  moto:  { len: 9,  wid: 5, color: '#10b981' }, // verde
-  bus:   { len: 35, wid: 8, color: '#f97316' }, // naranja
+  car:   { len: 27, wid: 12, color: '#3b82f6' }, // azul
+  truck: { len: 42, wid: 9,  color: '#ef4444' }, // rojo
+  moto:  { len: 12, wid: 7,  color: '#10b981' }, // verde
+  bus:   { len: 46, wid: 10, color: '#f97316' }, // naranja
 };
 
-// Densidad visual: solo renderizamos una fracción del count SUMO. La
-// cola luce más legible con menos slots y deja respirar la geometría.
-const DENSITY_FACTOR = 0.35;
+// Densidad visual: solo renderizamos una fracción del count SUMO. La cola
+// luce más legible con menos slots y deja respirar la geometría.
+const DENSITY_FACTOR = 0.20;        // car/truck/bus en el atasco
+const MOTO_DENSITY_FACTOR = 0.30;   // motos en el lindero
+const MOTO_LATERAL_PX = 20;         // offset perpendicular al eje de la vía (px)
+const MOTO_SPEED_MULT = 1.5;        // motos van 1.5× más rápido que la cola
 
 // ── Helpers puros ────────────────────────────────────────────────────
 function lerp(a, b, t) {
@@ -191,11 +194,11 @@ export default function RoadCanvas({
   // (con cumPrev/len/dirN precomputados). totalLen: arc-length total.
   const polylinePathRef = useRef({ key: null, path: null, segs: null, totalLen: 0 });
   // Cola sintetizada (Opción C): N slots distribuidos uniformemente sobre la
-  // polilínea, todos avanzando como un cinturón. N = vehicleCount de SUMO.
-  // Tipos asignados por proporción real (SUMO inyecta 65% car, 20% moto,
-  // 10% truck, 5% bus). Mantenemos solo la lista de tipos por slot — el
-  // arc se computa cada tick desde slotIdx*spacing + globalOffset.
+  // polilínea, todos avanzando como un cinturón. queueRef trackea solo
+  // car/truck/bus (los que están en el atasco). Las motos van aparte por
+  // el lindero, en motoQueueRef, a velocidad superior.
   const queueRef = useRef({ types: [], offset: 0 });
+  const motoQueueRef = useRef({ count: 0, offset: 0 });
   const lastTickTimeRef = useRef(0);
 
   // State (re-renderiza JSX y fallback overlay)
@@ -534,7 +537,7 @@ export default function RoadCanvas({
         // 1° lat = 111320 m. En Colombia 1° lon ≈ 111320 × cos(lat) — diferencia
         // <2.2%, aceptable usar 111320 directo. Independiente de vehicleScale.
         const pixelsPerMeter = scale / 111320;
-        const targetCarPixelLength = Math.max(14, 4.5 * pixelsPerMeter); // 4.5m = car típico; piso 14px deja ver el detalle
+        const targetCarPixelLength = Math.max(18, 4.5 * pixelsPerMeter); // 4.5m = car típico; piso 18px asegura detalle visible
         const dynamicVehicleScale = Math.max(0.2, Math.min(3.0, targetCarPixelLength / TYPE_SPEC.car.len));
 
         const project = (lon, lat) => ({
@@ -577,9 +580,11 @@ export default function RoadCanvas({
             prevPt = proj;
           }
           polylinePathRef.current = { key: pathKey, path, segs, totalLen: cumLen };
-          // La cola sintetizada se reinicia con la nueva geometría.
+          // Las colas sintetizadas se reinician con la nueva geometría.
           queueRef.current.types = [];
           queueRef.current.offset = 0;
+          motoQueueRef.current.count = 0;
+          motoQueueRef.current.offset = 0;
         }
         const path = polylinePathRef.current.path;
         const polySegs = polylinePathRef.current.segs;
@@ -625,23 +630,37 @@ export default function RoadCanvas({
           lastTickTimeRef.current = nowMs;
 
           const VISUAL_AMP_C = 4;
-          const sumoCount = Array.isArray(curr.vehicles) ? curr.vehicles.length : 0;
+
+          // Split SUMO count entre motos (van por el lindero) y resto
+          // (cars/trucks/buses, en el atasco)
+          let motoCountSumo = 0;
+          if (Array.isArray(curr.vehicles)) {
+            for (let i = 0; i < curr.vehicles.length; i++) {
+              if (curr.vehicles[i] && curr.vehicles[i].type === 'moto') motoCountSumo++;
+            }
+          }
+          const nonMotoSumo = (Array.isArray(curr.vehicles) ? curr.vehicles.length : 0) - motoCountSumo;
+
           const targetN = Math.min(
             MAX_VEHICLES_RENDER,
-            Math.round(sumoCount * DENSITY_FACTOR),
+            Math.round(nonMotoSumo * DENSITY_FACTOR),
           );
+          const targetMotos = Math.min(
+            MAX_VEHICLES_RENDER,
+            Math.round(motoCountSumo * MOTO_DENSITY_FACTOR),
+          );
+
           // Stop lights brillan cuando la cola está congestionada (avg<15 km/h)
           const isBraking = (props.jamSpeed || 0) < 15;
 
+          // ── Cola del atasco (car/truck/bus) ──
           const queue = queueRef.current;
-          // Ajustar tamaño de la cola al count actual SUMO
           while (queue.types.length < targetN) {
-            // Distribución 65% car / 20% moto / 10% truck / 5% bus
+            // Distribución renormalizada (sin motos): 80% car / 13% truck / 7% bus
             const r = Math.random();
             let t;
-            if (r < 0.65) t = 'car';
-            else if (r < 0.85) t = 'moto';
-            else if (r < 0.95) t = 'truck';
+            if (r < 0.80) t = 'car';
+            else if (r < 0.93) t = 'truck';
             else t = 'bus';
             queue.types.push(t);
           }
@@ -649,24 +668,44 @@ export default function RoadCanvas({
             queue.types.pop();
           }
 
+          // Avance global de la cola
+          const avgKmh = props.jamSpeed > 0 ? props.jamSpeed : 5;
+          const avgMps = avgKmh / 3.6;
+          const queueAdvance = avgMps * dt * VISUAL_AMP_C * pixelsPerMeter;
+          queue.offset += queueAdvance;
+          if (queue.offset > 1e9) queue.offset %= polyTotalLen;
+
+          const drawScale = props.vehicleScale * dynamicVehicleScale;
+
           if (queue.types.length > 0) {
-            // Avance global del cinturón
-            const avgKmh = props.jamSpeed > 0 ? props.jamSpeed : 5;
-            const avgMps = avgKmh / 3.6;
-            queue.offset += avgMps * dt * VISUAL_AMP_C * pixelsPerMeter;
-            // Mantener offset acotado para evitar drift numérico tras horas
-            if (queue.offset > 1e9) queue.offset %= polyTotalLen;
-
             const spacing = polyTotalLen / queue.types.length;
-            const drawScale = props.vehicleScale * dynamicVehicleScale;
-
             for (let i = 0; i < queue.types.length; i++) {
-              // Arc del slot i: (i × spacing + offset) mod totalLen
               let arc = (i * spacing + queue.offset) % polyTotalLen;
               if (arc < 0) arc += polyTotalLen;
               const point = arcToPoint(arc, polySegs, polyTotalLen);
               const angleRad = Math.atan2(point.dirNy, point.dirNx);
               drawVehicle(ctx, point.px, point.py, angleRad, queue.types[i], drawScale, isBraking);
+            }
+          }
+
+          // ── Motos por el lindero (no participan del atasco) ──
+          motoQueueRef.current.count = targetMotos;
+          // Avanzan más rápido que la cola (filtran/bypassan)
+          motoQueueRef.current.offset += queueAdvance * MOTO_SPEED_MULT;
+          if (motoQueueRef.current.offset > 1e9) motoQueueRef.current.offset %= polyTotalLen;
+
+          if (motoQueueRef.current.count > 0) {
+            const motoSpacing = polyTotalLen / motoQueueRef.current.count;
+            for (let i = 0; i < motoQueueRef.current.count; i++) {
+              let arc = (i * motoSpacing + motoQueueRef.current.offset) % polyTotalLen;
+              if (arc < 0) arc += polyTotalLen;
+              const point = arcToPoint(arc, polySegs, polyTotalLen);
+              // Offset perpendicular hacia la derecha del heading (lindero).
+              // perp_right en canvas Y-down: (-dirNy, +dirNx)
+              const lateralPx = point.px + (-point.dirNy) * MOTO_LATERAL_PX;
+              const lateralPy = point.py + point.dirNx * MOTO_LATERAL_PX;
+              const angleRad = Math.atan2(point.dirNy, point.dirNx);
+              drawVehicle(ctx, lateralPx, lateralPy, angleRad, 'moto', drawScale, false);
             }
           }
         }

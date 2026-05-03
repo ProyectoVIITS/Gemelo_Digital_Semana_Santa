@@ -46,6 +46,62 @@ function lerpAngle(a, b, t) {
   return a + diff * t;
 }
 
+// Snap un punto (vpx, vpy) en pixel space a la polilínea. Devuelve la
+// arc-length acumulada (distancia desde el inicio de la polilínea) y la
+// dirección normalizada del segmento más cercano.
+function pointToArc(vpx, vpy, segs) {
+  if (!segs || segs.length === 0) return { arc: 0, dirNx: 1, dirNy: 0 };
+  let bestD2 = Infinity;
+  let bestArc = 0;
+  let bestDirNx = segs[0].dirNx;
+  let bestDirNy = segs[0].dirNy;
+  for (let i = 0; i < segs.length; i++) {
+    const s = segs[i];
+    let t = ((vpx - s.ax) * s.dx + (vpy - s.ay) * s.dy) / s.len2;
+    if (t < 0) t = 0;
+    else if (t > 1) t = 1;
+    const cx = s.ax + t * s.dx;
+    const cy = s.ay + t * s.dy;
+    const ddx = vpx - cx;
+    const ddy = vpy - cy;
+    const d2 = ddx * ddx + ddy * ddy;
+    if (d2 < bestD2) {
+      bestD2 = d2;
+      bestArc = s.cumPrev + t * s.len;
+      bestDirNx = s.dirNx;
+      bestDirNy = s.dirNy;
+    }
+  }
+  return { arc: bestArc, dirNx: bestDirNx, dirNy: bestDirNy };
+}
+
+// Inverso: dado un arc-length, devuelve el (px, py) y la dirección local.
+function arcToPoint(arc, segs, totalLen) {
+  if (!segs || segs.length === 0) return { px: 0, py: 0, dirNx: 1, dirNy: 0 };
+  if (arc <= 0) {
+    const s = segs[0];
+    return { px: s.ax, py: s.ay, dirNx: s.dirNx, dirNy: s.dirNy };
+  }
+  if (arc >= totalLen) {
+    const s = segs[segs.length - 1];
+    return { px: s.ax + s.dx, py: s.ay + s.dy, dirNx: s.dirNx, dirNy: s.dirNy };
+  }
+  for (let i = 0; i < segs.length; i++) {
+    const s = segs[i];
+    if (arc <= s.cumPrev + s.len) {
+      const localT = (arc - s.cumPrev) / s.len;
+      return {
+        px: s.ax + localT * s.dx,
+        py: s.ay + localT * s.dy,
+        dirNx: s.dirNx,
+        dirNy: s.dirNy,
+      };
+    }
+  }
+  const s = segs[segs.length - 1];
+  return { px: s.ax + s.dx, py: s.ay + s.dy, dirNx: s.dirNx, dirNy: s.dirNy };
+}
+
 function vehicleSpec(type) {
   return TYPE_SPEC[type] || TYPE_SPEC.car;
 }
@@ -102,7 +158,13 @@ export default function RoadCanvas({
   const vehicleCountRef = useRef(0);
   const stepRef = useRef(0);
   const canLookupRef = useRef(false);
-  const polylinePathRef = useRef({ key: null, path: null });
+  // path: Path2D del asfalto. segs: segmentos en pixels para snap-to-polyline
+  // (con cumPrev/len/dirN precomputados). totalLen: arc-length total.
+  const polylinePathRef = useRef({ key: null, path: null, segs: null, totalLen: 0 });
+  // Estado visual por vehículo: arc actual, velocidad, timestamp del frame WS sincronizado.
+  // Permite mostrar la cola "fluyendo" entre frames SUMO con visualAmp.
+  const vehicleStateRef = useRef(new Map());
+  const lastTickTimeRef = useRef(0);
 
   // State (re-renderiza JSX y fallback overlay)
   const [phase, setPhase] = useState('idle');
@@ -448,21 +510,48 @@ export default function RoadCanvas({
           py: h - ((lat - bb.minLat) * scale + offsetY),
         });
 
-        // Path2D cacheado, invalida en cambios de polilínea/bbox/tamaño
+        // Path2D + segmentos para snap. Caché invalidado en cambios de
+        // polilínea/bbox/tamaño. segs incluye cumPrev (arc-length acumulada
+        // antes del segmento), len (longitud del segmento) y dirN (dirección
+        // normalizada) — todo precomputado para snap eficiente.
         const pathKey = `${pl.length}|${w}|${h}|${bb.minLon}|${bb.minLat}|${bb.maxLon}|${bb.maxLat}`;
         if (polylinePathRef.current.key !== pathKey) {
           const path = new Path2D();
+          const segs = [];
           let started = false;
+          let prevPt = null;
+          let cumLen = 0;
           for (let i = 0; i < pl.length; i++) {
             const p = pl[i];
             if (p == null || p.x == null || p.y == null) continue;
             const proj = project(p.x, p.y);
             if (!started) { path.moveTo(proj.px, proj.py); started = true; }
             else { path.lineTo(proj.px, proj.py); }
+            if (prevPt) {
+              const dx = proj.px - prevPt.px;
+              const dy = proj.py - prevPt.py;
+              const len2 = dx * dx + dy * dy;
+              if (len2 > 0.01) {
+                const len = Math.sqrt(len2);
+                segs.push({
+                  ax: prevPt.px, ay: prevPt.py,
+                  dx, dy, len2, len,
+                  dirNx: dx / len, dirNy: dy / len,
+                  cumPrev: cumLen,
+                });
+                cumLen += len;
+              }
+            }
+            prevPt = proj;
           }
-          polylinePathRef.current = { key: pathKey, path };
+          polylinePathRef.current = { key: pathKey, path, segs, totalLen: cumLen };
+          // Invalida los arcs cacheados de vehículos (ya no son consistentes
+          // con los nuevos segmentos en pixel-space).
+          vehicleStateRef.current.clear();
         }
         const path = polylinePathRef.current.path;
+        const polySegs = polylinePathRef.current.segs;
+        const polyTotalLen = polylinePathRef.current.totalLen;
 
         const isSevere = (props.jamLevel >= 3) || (props.jamRatio > 2);
 
@@ -490,34 +579,66 @@ export default function RoadCanvas({
         ctx.lineJoin = 'round';
         ctx.stroke(path);
 
-        // Vehículos con interpolación entre snapshots SUMO
+        // Vehículos: snap a la polilínea (Opción B).
+        // Cada vehículo SUMO se proyecta al punto más cercano de la polilínea
+        // y se orienta según la tangente local. Entre frames WS, el arc
+        // avanza visualmente a velocidad SUMO × visualAmp para que la cola
+        // se vea fluir incluso a 9 km/h reales (donde el movimiento sería
+        // sub-pixel). Cada nuevo frame WS hace sync suave 70/30 contra la
+        // posición SUMO real (evita teleport, mantiene tendencia visual).
         const curr = currFrameRef.current;
-        const prev = prevFrameRef.current;
-        if (curr && Array.isArray(curr.vehicles)) {
-          const tRaw = (performance.now() - frameReceivedAtRef.current) / FRAME_PERIOD_MS;
-          const tInterp = Math.max(0, Math.min(1, tRaw));
+        if (curr && Array.isArray(curr.vehicles) && polySegs && polySegs.length > 0) {
+          const nowMs = performance.now();
+          const lastTick = lastTickTimeRef.current || nowMs;
+          const dt = Math.min(0.1, (nowMs - lastTick) / 1000); // cap dt 100ms
+          lastTickTimeRef.current = nowMs;
 
-          const prevById = new Map();
-          if (prev && Array.isArray(prev.vehicles)) {
-            for (const v of prev.vehicles) prevById.set(v.id, v);
-          }
+          const VISUAL_AMP = 3;
+          const frameStamp = frameReceivedAtRef.current;
+          const stateMap = vehicleStateRef.current;
 
           const vehicles = curr.vehicles.length > MAX_VEHICLES_RENDER
             ? curr.vehicles.slice(0, MAX_VEHICLES_RENDER)
             : curr.vehicles;
 
+          const presentIds = new Set();
           for (const v of vehicles) {
             if (v == null || v.lon == null || v.lat == null) continue;
-            const p = prevById.get(v.id);
-            const lon = p ? lerp(p.lon, v.lon, tInterp) : v.lon;
-            const lat = p ? lerp(p.lat, v.lat, tInterp) : v.lat;
-            const angle = p
-              ? lerpAngle(p.angle == null ? (v.angle || 0) : p.angle, v.angle == null ? 0 : v.angle, tInterp)
-              : (v.angle == null ? 0 : v.angle);
+            presentIds.add(v.id);
 
-            const proj = project(lon, lat);
-            const angleRad = ((angle - 90) * Math.PI) / 180;
-            drawVehicle(ctx, proj.px, proj.py, angleRad, v.type, props.vehicleScale * dynamicVehicleScale);
+            const proj = project(v.lon, v.lat);
+            const sumoSnap = pointToArc(proj.px, proj.py, polySegs);
+
+            let state = stateMap.get(v.id);
+            if (!state) {
+              // Primer avistamiento: arrancar exactamente donde SUMO lo puso
+              state = {
+                arc: sumoSnap.arc,
+                speed: typeof v.speed === 'number' ? v.speed : 0,
+                stamp: frameStamp,
+              };
+              stateMap.set(v.id, state);
+            } else if (state.stamp !== frameStamp) {
+              // Nuevo frame WS: sync suave 70% visual / 30% SUMO real
+              state.arc = state.arc * 0.7 + sumoSnap.arc * 0.3;
+              state.speed = typeof v.speed === 'number' ? v.speed : state.speed;
+              state.stamp = frameStamp;
+            }
+
+            // Avance visual continuo (simula la cola creciendo)
+            const speedMps = state.speed / 3.6;
+            state.arc += speedMps * dt * VISUAL_AMP * pixelsPerMeter;
+            if (state.arc > polyTotalLen) state.arc = polyTotalLen;
+            else if (state.arc < 0) state.arc = 0;
+
+            const point = arcToPoint(state.arc, polySegs, polyTotalLen);
+            const angleRad = Math.atan2(point.dirNy, point.dirNx);
+            drawVehicle(ctx, point.px, point.py, angleRad, v.type, props.vehicleScale * dynamicVehicleScale);
+          }
+
+          // Cleanup: drop estados de vehículos que ya no están en el frame
+          for (const vid of Array.from(stateMap.keys())) {
+            if (!presentIds.has(vid)) stateMap.delete(vid);
           }
         }
       }

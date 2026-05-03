@@ -37,7 +37,7 @@ const TYPE_SPEC = {
 
 // Densidad visual: solo renderizamos una fracción del count SUMO. La cola
 // luce más legible con menos slots y deja respirar la geometría.
-const DENSITY_FACTOR = 0.20;        // car/truck/bus en el atasco
+const DENSITY_FACTOR = 0.10;        // car/truck/bus en el atasco
 const MOTO_DENSITY_FACTOR = 0.30;   // motos en el lindero
 const MOTO_LATERAL_PX = 20;         // offset perpendicular al eje de la vía (px)
 const MOTO_SPEED_MULT = 1.5;        // motos van 1.5× más rápido que la cola

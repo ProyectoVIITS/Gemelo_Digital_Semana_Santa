@@ -171,7 +171,10 @@ def convert_to_sumo_net(jam_id: str, osm_file: Path, output_dir: Path) -> Path:
         "netconvert",
         "--osm-files", str(osm_file),
         "--output-file", str(net_file),
-        "--geometry.remove", "true",
+        # geometry.remove=false: preserva puntos intermedios. En vías rurales con
+        # poca densidad OSM, simplificar nodos colineales convierte curvas en
+        # líneas rectas → vehículos cruzan fuera de la polilínea Waze.
+        "--geometry.remove", "false",
         "--ramps.guess", "true",
         "--roundabouts.guess", "true",
         "--junctions.join", "true",

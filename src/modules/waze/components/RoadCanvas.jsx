@@ -500,7 +500,7 @@ export default function RoadCanvas({
         // 1° lat = 111320 m. En Colombia 1° lon ≈ 111320 × cos(lat) — diferencia
         // <2.2%, aceptable usar 111320 directo. Independiente de vehicleScale.
         const pixelsPerMeter = scale / 111320;
-        const targetCarPixelLength = Math.max(3.5, 4.5 * pixelsPerMeter); // 4.5m = car típico
+        const targetCarPixelLength = Math.max(8, 4.5 * pixelsPerMeter); // 4.5m = car típico; piso 8px asegura visibilidad
         const dynamicVehicleScale = Math.max(0.2, Math.min(3.0, targetCarPixelLength / 18));
 
         const project = (lon, lat) => ({

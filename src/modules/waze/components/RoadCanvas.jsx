@@ -332,10 +332,24 @@ export default function RoadCanvas({
         reconnectDelayRef.current = WS_RECONNECT_BASE;
       };
 
-      ws.onmessage = (ev) => {
+      ws.onmessage = async (ev) => {
         if (cancelled) return;
         try {
-          const msg = JSON.parse(ev.data);
+          let dataStr;
+          if (typeof ev.data === 'string') {
+            dataStr = ev.data;
+          } else if (ev.data instanceof Blob) {
+            // El proxy/upstream puede enviar binario (orjson + send_bytes).
+            // El navegador lo entrega como Blob por defecto.
+            dataStr = await ev.data.text();
+          } else if (ev.data instanceof ArrayBuffer) {
+            dataStr = new TextDecoder().decode(ev.data);
+          } else {
+            console.warn('[RoadCanvas] WS unknown data type:', typeof ev.data);
+            return;
+          }
+          if (cancelled) return;
+          const msg = JSON.parse(dataStr);
           if (msg && msg.type === 'sumo_frame' && msg.data) {
             prevFrameRef.current = currFrameRef.current;
             currFrameRef.current = msg.data;
@@ -349,8 +363,8 @@ export default function RoadCanvas({
               firstFrameTimerRef.current = null;
             }
           }
-        } catch (_) {
-          /* mensaje no-JSON: ignorar */
+        } catch (e) {
+          console.warn('[RoadCanvas] WS parse error:', e && e.message);
         }
       };
 

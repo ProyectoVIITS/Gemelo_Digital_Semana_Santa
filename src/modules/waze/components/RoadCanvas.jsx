@@ -26,8 +26,14 @@ const LOOKUP_REFRESH_MS = 60000;
 const FRAME_PERIOD_MS = 500;
 const RELOOKUP_AFTER_4404_MS = 5000;
 
-// Paleta de chasis del v1 — color estable por id de vehículo
-const CAR_COLORS = ['#e2e8f0', '#94a3b8', '#0f172a', '#1e293b', '#b91c1c', '#0369a1'];
+// Visual minimalista: rectángulo plano coloreado por tipo, borde fino.
+// El color del vehículo NO refleja velocidad (esa info va al HUD agregado).
+const TYPE_SPEC = {
+  car:   { len: 18, wid: 8, color: '#3b82f6' }, // azul
+  truck: { len: 28, wid: 6, color: '#ef4444' }, // rojo
+  moto:  { len: 8,  wid: 4, color: '#10b981' }, // verde
+  bus:   { len: 30, wid: 7, color: '#f97316' }, // naranja
+};
 
 // ── Helpers puros ────────────────────────────────────────────────────
 function lerp(a, b, t) {
@@ -40,91 +46,25 @@ function lerpAngle(a, b, t) {
   return a + diff * t;
 }
 
-function colorForVehicle(id) {
-  if (!id) return CAR_COLORS[0];
-  let h = 0;
-  for (let i = 0; i < id.length; i++) {
-    h = ((h << 5) - h + id.charCodeAt(i)) | 0;
-  }
-  return CAR_COLORS[Math.abs(h) % CAR_COLORS.length];
+function vehicleSpec(type) {
+  return TYPE_SPEC[type] || TYPE_SPEC.car;
 }
 
-function vehicleSize(type) {
-  switch (type) {
-    case 'moto':  return { len: 8,  wid: 4 };
-    case 'truck': return { len: 28, wid: 6 };
-    case 'bus':   return { len: 30, wid: 7 };
-    case 'car':
-    default:      return { len: 18, wid: 8 };
-  }
-}
-
-function drawVehicle(ctx, x, y, angleRad, type, color, speed, scale) {
-  const base = vehicleSize(type);
-  const len = base.len * scale;
-  const wid = base.wid * scale;
-  const isBraking = speed < 5;
+function drawVehicle(ctx, x, y, angleRad, type, scale) {
+  const spec = vehicleSpec(type);
+  const len = spec.len * scale;
+  const wid = spec.wid * scale;
 
   ctx.save();
   ctx.translate(x, y);
   ctx.rotate(angleRad);
-
-  // Sombra perimetral
-  ctx.shadowColor = 'rgba(0,0,0,0.5)';
-  ctx.shadowBlur = 4;
-  ctx.shadowOffsetY = 2;
-
-  // Chasis (centrado en el origen local)
-  ctx.fillStyle = color;
-  ctx.beginPath();
-  ctx.roundRect(-len / 2, -wid / 2, len, wid, 2);
-  ctx.fill();
-
-  ctx.shadowColor = 'transparent';
-  ctx.shadowBlur = 0;
-  ctx.shadowOffsetY = 0;
-
-  // Techo (rectángulo más oscuro, ~50% de la longitud)
-  ctx.fillStyle = 'rgba(0,0,0,0.18)';
-  ctx.beginPath();
-  ctx.roundRect(-len * 0.25, -wid * 0.4, len * 0.5, wid * 0.8, 1);
-  ctx.fill();
-
-  // Parabrisas frontal (cerca del frente, +X local)
-  ctx.fillStyle = 'rgba(15, 23, 42, 0.9)';
-  ctx.beginPath();
-  ctx.roundRect(len * 0.18, -wid * 0.35, len * 0.1, wid * 0.7, 1);
-  ctx.fill();
-
-  // Parabrisas trasero
-  ctx.fillStyle = 'rgba(15, 23, 42, 0.8)';
-  ctx.beginPath();
-  ctx.roundRect(-len * 0.27, -wid * 0.35, len * 0.08, wid * 0.7, 1);
-  ctx.fill();
-
-  // Stop lights (cola = -X local)
-  const tailColor = isBraking ? '#ef4444' : '#7f1d1d';
-  ctx.fillStyle = tailColor;
-  if (isBraking) {
-    ctx.shadowColor = '#ef4444';
-    ctx.shadowBlur = 6;
-  }
-  ctx.fillRect(-len / 2, -wid * 0.45, 2, wid * 0.2);
-  ctx.fillRect(-len / 2, wid * 0.25, 2, wid * 0.2);
-
-  // Headlights (frente = +X local)
-  ctx.shadowBlur = 0;
-  ctx.fillStyle = '#fef08a';
-  ctx.fillRect(len / 2 - 2, -wid * 0.45, 2, wid * 0.2);
-  ctx.fillRect(len / 2 - 2, wid * 0.25, 2, wid * 0.2);
-
-  // Glow tenue de las luces delanteras
-  const glow = ctx.createLinearGradient(len / 2, 0, len / 2 + 12, 0);
-  glow.addColorStop(0, 'rgba(254, 240, 138, 0.15)');
-  glow.addColorStop(1, 'transparent');
-  ctx.fillStyle = glow;
-  ctx.fillRect(len / 2, -wid / 2, 12, wid);
-
+  // Cuerpo coloreado por tipo
+  ctx.fillStyle = spec.color;
+  ctx.fillRect(-len / 2, -wid / 2, len, wid);
+  // Borde fino para legibilidad sobre asfalto oscuro
+  ctx.strokeStyle = 'rgba(0, 0, 0, 0.7)';
+  ctx.lineWidth = 1;
+  ctx.strokeRect(-len / 2, -wid / 2, len, wid);
   ctx.restore();
 }
 
@@ -500,7 +440,7 @@ export default function RoadCanvas({
         // 1° lat = 111320 m. En Colombia 1° lon ≈ 111320 × cos(lat) — diferencia
         // <2.2%, aceptable usar 111320 directo. Independiente de vehicleScale.
         const pixelsPerMeter = scale / 111320;
-        const targetCarPixelLength = Math.max(8, 4.5 * pixelsPerMeter); // 4.5m = car típico; piso 8px asegura visibilidad
+        const targetCarPixelLength = Math.max(12, 4.5 * pixelsPerMeter); // 4.5m = car típico; piso 12px para visibilidad clara
         const dynamicVehicleScale = Math.max(0.2, Math.min(3.0, targetCarPixelLength / 18));
 
         const project = (lon, lat) => ({
@@ -574,12 +514,10 @@ export default function RoadCanvas({
             const angle = p
               ? lerpAngle(p.angle == null ? (v.angle || 0) : p.angle, v.angle == null ? 0 : v.angle, tInterp)
               : (v.angle == null ? 0 : v.angle);
-            const speed = typeof v.speed === 'number' ? v.speed : 0;
 
             const proj = project(lon, lat);
             const angleRad = ((angle - 90) * Math.PI) / 180;
-            const color = colorForVehicle(v.id);
-            drawVehicle(ctx, proj.px, proj.py, angleRad, v.type, color, speed, props.vehicleScale * dynamicVehicleScale);
+            drawVehicle(ctx, proj.px, proj.py, angleRad, v.type, props.vehicleScale * dynamicVehicleScale);
           }
         }
       }

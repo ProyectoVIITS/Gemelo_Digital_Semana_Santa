@@ -259,7 +259,8 @@ class SUMOInstance:
                     traci.route.add(route_id, [origin_edge, dest_edge])
                     traci.vehicle.add(
                         vehID=veh_id, routeID=route_id, typeID=vtype,
-                        depart="now", departLane="best", departSpeed="random",
+                        depart="now", departLane="best", departSpeed="max",
+                        departPos="random_free"
                     )
                     injected += 1
                 except traci.exceptions.TraCIException:
@@ -267,6 +268,7 @@ class SUMOInstance:
                         traci.route.add(route_id, [origin_edge])
                         traci.vehicle.add(
                             vehID=veh_id, routeID=route_id, typeID=vtype, depart="now",
+                            departLane="best", departSpeed="max", departPos="random_free"
                         )
                         injected += 1
                     except Exception:

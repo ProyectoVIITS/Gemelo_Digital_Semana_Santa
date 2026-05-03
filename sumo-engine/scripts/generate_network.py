@@ -36,6 +36,8 @@ import argparse
 import subprocess
 import urllib.request
 import urllib.parse
+import math
+import xml.etree.ElementTree as ET
 from pathlib import Path
 
 # ── Directorios ──
@@ -56,6 +58,15 @@ OSM_ROAD_TYPES = [
 
 # ── Margen alrededor del jam (en grados) para capturar contexto vial ──
 BBOX_PADDING = 0.008  # ~800m de contexto alrededor de la polyline
+
+# ── Filtrado de OSM por proximidad a la polilínea Waze ──
+# Bumpear si cambia la lógica de filtrado: invalida caches existentes en disco.
+FILTER_VERSION = 1
+# Primer intento (override por env var). Fallbacks hardcoded para vías rurales.
+POLYLINE_BUFFER_M = float(os.getenv("POLYLINE_BUFFER_M", "30"))
+BUFFER_FALLBACKS_M = [50.0, 80.0]
+EARTH_RADIUS_M = 6371000.0
+MIN_WAYS_AFTER_FILTER = 3
 
 
 def get_jam_id(jam: dict) -> str:
@@ -148,8 +159,13 @@ def convert_to_sumo_net(jam_id: str, osm_file: Path, output_dir: Path) -> Path:
     """Convertir OSM a red SUMO (.net.xml)."""
     net_file = output_dir / f"{jam_id}.net.xml"
     if net_file.exists():
-        print(f"    ↪ Red SUMO ya existente, reutilizando: {net_file.name}")
-        return net_file
+        try:
+            if osm_file.stat().st_mtime <= net_file.stat().st_mtime:
+                print(f"    ↪ Red SUMO ya existente, reutilizando: {net_file.name}")
+                return net_file
+            print(f"    ↪ OSM más nuevo que red SUMO, regenerando: {net_file.name}")
+        except OSError:
+            pass
 
     cmd = [
         "netconvert",
@@ -266,6 +282,152 @@ def generate_manifest(results: list):
     return manifest_file
 
 
+def _project_polyline_to_meters(polyline: list):
+    """Proyecta la polilínea Waze a metros locales (equirectangular).
+    Devuelve (segmentos_xy, ref_lat_deg, ref_lon_deg). Cada segmento es
+    (ax, ay, dx, dy, len2) precomputado para distancia rápida punto-segmento.
+    Devuelve (None, 0, 0) si la polilínea es inválida."""
+    if not polyline or len(polyline) < 2:
+        return None, 0.0, 0.0
+    valid = [p for p in polyline if p and p.get("x") is not None and p.get("y") is not None]
+    if len(valid) < 2:
+        return None, 0.0, 0.0
+    ref_lat = sum(p["y"] for p in valid) / len(valid)
+    ref_lon = sum(p["x"] for p in valid) / len(valid)
+    cos_ref = math.cos(math.radians(ref_lat))
+    coords = []
+    for p in valid:
+        x = math.radians(p["x"] - ref_lon) * EARTH_RADIUS_M * cos_ref
+        y = math.radians(p["y"] - ref_lat) * EARTH_RADIUS_M
+        coords.append((x, y))
+    segs = []
+    for i in range(len(coords) - 1):
+        ax, ay = coords[i]
+        bx, by = coords[i + 1]
+        dx = bx - ax
+        dy = by - ay
+        segs.append((ax, ay, dx, dy, dx * dx + dy * dy))
+    return segs, ref_lat, ref_lon
+
+
+def _min_dist2_to_segs(px: float, py: float, segs) -> float:
+    """Distancia² mínima de (px, py) a cualquier segmento (en metros locales)."""
+    min_d2 = float("inf")
+    for ax, ay, dx, dy, len2 in segs:
+        if len2 < 1e-9:
+            d2 = (px - ax) ** 2 + (py - ay) ** 2
+        else:
+            t = ((px - ax) * dx + (py - ay) * dy) / len2
+            if t < 0.0:
+                t = 0.0
+            elif t > 1.0:
+                t = 1.0
+            cx = ax + t * dx
+            cy = ay + t * dy
+            d2 = (px - cx) ** 2 + (py - cy) ** 2
+        if d2 < min_d2:
+            min_d2 = d2
+    return min_d2
+
+
+def _filter_osm_attempt(osm_file: Path, polyline: list, buffer_m: float):
+    """Intento único de filtrado a un buffer dado.
+    Devuelve (kept_count, dropped_count, tree_filtrado) o (kept, dropped, None)
+    si la red queda con < MIN_WAYS_AFTER_FILTER ways (señal de retry)."""
+    segs, ref_lat, ref_lon = _project_polyline_to_meters(polyline)
+    if segs is None:
+        return 0, 0, None
+
+    try:
+        tree = ET.parse(osm_file)
+    except ET.ParseError as e:
+        print(f"    ✗ OSM XML malformado: {e}")
+        return 0, 0, None
+    root = tree.getroot()
+
+    # Lookup id → (lat, lon)
+    nodes = {}
+    for n in root.findall("node"):
+        nid = n.get("id")
+        if not nid:
+            continue
+        try:
+            nodes[nid] = (float(n.get("lat")), float(n.get("lon")))
+        except (TypeError, ValueError):
+            continue
+
+    cos_ref = math.cos(math.radians(ref_lat))
+    buffer2 = buffer_m * buffer_m
+    kept_node_ids = set()
+    ways_to_remove = []
+    kept_count = 0
+
+    for w in root.findall("way"):
+        nd_refs = [nd.get("ref") for nd in w.findall("nd") if nd.get("ref")]
+        keep = False
+        for nid in nd_refs:
+            coord = nodes.get(nid)
+            if coord is None:
+                continue
+            lat, lon = coord
+            x = math.radians(lon - ref_lon) * EARTH_RADIUS_M * cos_ref
+            y = math.radians(lat - ref_lat) * EARTH_RADIUS_M
+            if _min_dist2_to_segs(x, y, segs) <= buffer2:
+                keep = True
+                break
+        if keep:
+            kept_count += 1
+            kept_node_ids.update(nd_refs)
+        else:
+            ways_to_remove.append(w)
+
+    if kept_count < MIN_WAYS_AFTER_FILTER:
+        return kept_count, len(ways_to_remove), None
+
+    # Mutación del árbol
+    for w in ways_to_remove:
+        root.remove(w)
+    nodes_to_remove = [n for n in root.findall("node") if n.get("id") not in kept_node_ids]
+    for n in nodes_to_remove:
+        root.remove(n)
+    # Eliminar relaciones: pueden referenciar ways borrados (turn restrictions, etc.).
+    # No críticas para simulación de flujo en una sola vía.
+    for r in list(root.findall("relation")):
+        root.remove(r)
+
+    return kept_count, len(ways_to_remove), tree
+
+
+def filter_osm_by_polyline(osm_file: Path, polyline: list) -> Path:
+    """Reescribe el OSM dejando solo ways cuyo geom esté cerca de la polilínea Waze.
+    Cascada de buffers POLYLINE_BUFFER_M → 50m → 80m. Devuelve Path al .filtered.osm
+    o None si todos los buffers fallan o la polilínea es inválida.
+    Cache invalidada por FILTER_VERSION (marker .filter_v junto al .osm)."""
+    filtered_file = osm_file.with_name(osm_file.stem + ".filtered.osm")
+    marker_file = osm_file.with_name(osm_file.stem + ".filter_v")
+
+    if filtered_file.exists() and marker_file.exists():
+        try:
+            if int(marker_file.read_text().strip()) == FILTER_VERSION:
+                print(f"    ↪ OSM filtrado ya existente (v{FILTER_VERSION}), reutilizando")
+                return filtered_file
+        except (ValueError, OSError):
+            pass
+
+    buffers = [POLYLINE_BUFFER_M] + BUFFER_FALLBACKS_M
+    for buffer_m in buffers:
+        kept, dropped, tree = _filter_osm_attempt(osm_file, polyline, buffer_m)
+        if tree is not None:
+            tree.write(filtered_file, encoding="utf-8", xml_declaration=True)
+            marker_file.write_text(str(FILTER_VERSION))
+            print(f"    ✓ OSM filtrado a {buffer_m:.0f}m: {kept} ways dentro, {dropped} descartados")
+            return filtered_file
+        print(f"    ↪ buffer {buffer_m:.0f}m insuficiente ({kept} ways), probando siguiente")
+
+    print(f"    ✗ Filtro de polilínea agotó cascada (30/50/80m), red descartada")
+    return None
+
+
 def process_jam(jam: dict, index: int) -> dict:
     """Procesar un jam individual: descargar OSM, generar red SUMO."""
     jam_id = get_jam_id(jam)
@@ -310,8 +472,14 @@ def process_jam(jam: dict, index: int) -> dict:
         print(f"  └─ ✗ Fallo en descarga OSM")
         return None
 
-    # 5. Convertir a red SUMO
-    net_file = convert_to_sumo_net(jam_id, osm_file, seg_dir)
+    # 4.5 Filtrar OSM a la polilínea Waze (descartar calles paralelas/laterales)
+    filtered_osm = filter_osm_by_polyline(osm_file, jam.get("line", []))
+    if not filtered_osm:
+        print(f"  └─ ✗ Filtro de polilínea dejó red vacía o inválida")
+        return None
+
+    # 5. Convertir a red SUMO (input = OSM filtrado)
+    net_file = convert_to_sumo_net(jam_id, filtered_osm, seg_dir)
     if not net_file:
         print(f"  └─ ✗ Fallo en conversión netconvert")
         return None

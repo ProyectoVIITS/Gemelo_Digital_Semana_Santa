@@ -114,16 +114,19 @@ function DepartmentCard({ deptGroup }) {
       </button>
       {expanded && bounds && (
         <div className="border-t" style={{ borderColor: `${color}30` }}>
-          <div style={{ height: 220, width: '100%' }}>
+          <div style={{ height: 240, width: '100%' }}>
             <MapContainer
               bounds={bounds}
-              style={{ height: '100%', width: '100%', backgroundColor: '#0a0e17' }}
+              style={{ height: '100%', width: '100%', backgroundColor: '#e8eef5' }}
               attributionControl={false}
-              zoomControl={false}
-              scrollWheelZoom={false}
+              zoomControl={true}
+              scrollWheelZoom={true}
+              dragging={true}
+              doubleClickZoom={true}
+              touchZoom={true}
             >
               <TileLayer
-                url="https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png"
+                url="https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png"
                 subdomains="abcd"
               />
               {jams.map((jam, i) => {
@@ -139,7 +142,7 @@ function DepartmentCard({ deptGroup }) {
                   <Polyline
                     key={jam.uuid || jam.id || i}
                     positions={positions}
-                    pathOptions={{ color: c, weight: 4, opacity: 0.85 }}
+                    pathOptions={{ color: c, weight: 5, opacity: 0.95 }}
                   >
                     <LTooltip direction="top" sticky opacity={0.95}>
                       <div style={{ fontSize: 10, lineHeight: 1.4, maxWidth: 240 }}>
@@ -224,13 +227,13 @@ export default function DepartmentJamsView() {
           <div className="text-sm font-bold uppercase tracking-[0.2em] text-white flex items-center gap-2">
             Panorama por Departamento
             <div className="px-2 py-0.5 rounded text-[8px] tracking-widest font-bold bg-teal-500/15 text-teal-300">
-              WAZE TVT NACIONAL
+              TIEMPO REAL NACIONAL
             </div>
           </div>
           <div className="text-[10px] text-slate-400 tracking-wide mt-0.5 font-mono">
             {totalEvents > 0
-              ? `${totalEvents} eventos Waze · ${groups.length} entidades territoriales con actividad`
-              : 'Cobertura nacional Waze TVT en tiempo real'}
+              ? `${totalEvents} eventos en vía · ${groups.length} entidades territoriales con actividad`
+              : 'Cobertura nacional en tiempo real'}
           </div>
         </div>
       </div>
@@ -238,7 +241,7 @@ export default function DepartmentJamsView() {
       {totalEvents === 0 ? (
         <div className="text-center py-6 px-4 border border-dashed rounded-lg border-slate-700/50 bg-slate-800/20">
           <span className="text-slate-400 text-xs tracking-widest uppercase">
-            ✅ Sin eventos Waze activos a nivel nacional en este momento
+            ✅ Sin eventos activos a nivel nacional en este momento
           </span>
         </div>
       ) : (

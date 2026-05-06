@@ -15,6 +15,7 @@ import { useAccidentData } from '../../hooks/useAccidentData';
 import { getNivelRiesgo, RIESGO_COLORS, RIESGO_LABELS, RIESGO_RANGES } from '../../data/accidentUtils';
 import MonitorLoadingScreen from './LoadingScreen';
 import { useTrafficStore } from '../../store/trafficStore';
+import DepartmentJamsView from '../../components/DepartmentJamsView';
 
 /* ─── Shared style constants (matching Chuzacá) ─── */
 const CARD = { backgroundColor: 'rgba(13, 26, 46, 0.6)', borderColor: '#1a2d4a' };
@@ -915,6 +916,9 @@ export default function MonitorPage() {
       <main className="max-w-[1600px] mx-auto px-3 py-3">
         {/* ALERTA DITRA — Panel de congestión para reporte Policía */}
         <AlertaDITRA corridorData={corridorData} />
+
+        {/* PANORAMA POR DEPARTAMENTO — Todos los eventos Waze agrupados por entidad territorial */}
+        <DepartmentJamsView />
 
         {/* Global KPIs */}
         <GlobalKPIs globalMetrics={globalMetrics} alertCount={alerts.length} />

@@ -229,6 +229,15 @@ function getTopWazeJams() {
     .slice(0, 10);
 }
 
+// Devuelve TODOS los jams Waze activos (sin filtro de jamLevel, sin slice).
+// Usado por el bloque "PANORAMA POR DEPARTAMENTO" para visualizar la cobertura
+// nacional completa, no solo los 10 más críticos. Filtra solo entradas STATIC
+// y level 0 (free flow, ruido del feed).
+function getAllWazeJams() {
+  return (wazeTvtCache.data || [])
+    .filter(j => j && j.jamLevel >= 1 && j.type !== 'STATIC');
+}
+
 let globalRRIndex = 0;
 function startPoller(wss) {
   console.log(`[Backend-Poller] Iniciando polling para ${ALL_STATIONS.length} peajes...`);
@@ -251,10 +260,11 @@ function startPoller(wss) {
         ts: a.pubMillis || Date.now()
       }));
 
-    const payload = JSON.stringify({ 
-      type: 'traffic_update', 
+    const payload = JSON.stringify({
+      type: 'traffic_update',
       data: globalTrafficStore,
       nationalWazeJams: topWazeJams,
+      nationalWazeJamsAll: getAllWazeJams(), // Todos los jams (panorama por depto)
       wazeAccidents: wazeAccidents // Inyectado para el Analizador 3D
     });
     wss.clients.forEach(c => {
@@ -301,4 +311,4 @@ function startPoller(wss) {
 }
 
 function getStore() { return globalTrafficStore; }
-module.exports = { startPoller, getStore, getTopWazeJams };
+module.exports = { startPoller, getStore, getTopWazeJams, getAllWazeJams };

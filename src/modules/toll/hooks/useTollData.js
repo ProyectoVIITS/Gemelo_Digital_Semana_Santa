@@ -214,55 +214,13 @@ function buildSnapshot(irt, stationId, realTraffic = null) {
   let queueFactor;
 
   if (realTraffic && realTraffic.congestionRatio != null) {
+    // Datos reales API (Google/TomTom/HERE fusionados, boost Waze accidentes)
     queueFactor = realTraffic.congestionRatio;
-  } else if (isRetorno) {
-    // RETORNO PURO (festivos)
-    const isGridlock = hour >= 17 && hour <= 20;
-    const isPeakReturn = hour >= 13 && hour <= 16;
-    const isBuildUp = hour >= 10 && hour <= 12;
-    const isLateEvening = hour >= 21 && hour <= 22;
-    queueFactor = isGridlock ? 1.0
-      : isPeakReturn ? 0.90
-      : isBuildUp ? 0.65
-      : isLateEvening ? 0.35
-      : 0.0;
-  } else if (opModeSnap.exodoLevel === 'pleno') {
-    // ÉXODO PLENO (Jueves Santo): 98% congestión en picos 7-9AM y 14-16PM
-    const isPeakAM = hour >= 7 && hour <= 9;
-    const isPeakPM = hour >= 14 && hour <= 16;
-    const isCriticalPeak = isPeakAM || isPeakPM;
-    queueFactor = isCriticalPeak ? 1.0
-      : (hour >= 5 && hour <= 6) ? 0.75
-      : (hour >= 10 && hour <= 13) ? 0.55
-      : (hour >= 17 && hour <= 18) ? 0.75
-      : (hour >= 19 && hour <= 21) ? 0.40
-      : 0.10;
-  } else if (opModeSnap.isExodo) {
-    // ÉXODO NORMAL/ALTO: colas moderadas-altas en horas pico
-    const isPeakAM = hour >= 5 && hour <= 10;
-    const isPeakPM = hour >= 14 && hour <= 18;
-    const isPeak = isPeakAM || isPeakPM;
-    queueFactor = isPeak ? 0.85
-      : (hour >= 11 && hour <= 13) ? 0.45
-      : (hour >= 19 && hour <= 21) ? 0.35
-      : 0.10;
-  } else if (isBidirectionalSnap) {
-    // BIDIRECCIONAL (días laborales): colas moderadas en horas pico
-    const isPeakAM = hour >= 6 && hour <= 9;
-    const isPeakPM = hour >= 16 && hour <= 19;
-    queueFactor = isPeakAM ? 0.55
-      : isPeakPM ? 0.50
-      : (hour >= 10 && hour <= 15) ? 0.25
-      : 0.0;
   } else {
-    // SALIDA PURA: picos 6-8am y 3-5pm
-    const isPeakAM = hour >= 6 && hour <= 8;
-    const isPeakPM = hour >= 15 && hour <= 17;
-    const isPeak = isPeakAM || isPeakPM;
-    queueFactor = isPeak ? 1.0
-      : (hour >= 9 && hour <= 14) ? 0.45
-      : (hour >= 18 && hour <= 20) ? 0.35
-      : 0.0;
+    // SIN DATOS REALES: vía asumida fluida. NO simular colas hardcodeadas
+    // por hora — ese fallback inventaba congestión que no estaba siendo
+    // confirmada por ninguna fuente y confundía con el dato Waze visible.
+    queueFactor = 0;
   }
 
   // ─── Generar N carriles dinámicos basados en boothConfig real ───

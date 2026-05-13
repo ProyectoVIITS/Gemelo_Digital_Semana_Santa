@@ -681,24 +681,15 @@ export default function TollCanvas({
       // ── Spawn rate basado en datos reales (Salida) ──
       let effectiveFlow;
       if (_hasRealTraffic) {
-        // FLUJO DICTADO POR API:
-        // Si hay alta congestión (ej. >0.6), inyectar flujo bajo-medio visual (para representar tacos visuales en pantalla, muchos carros = mucho tráfico)
-        // Si hay flujo libre (cong < 0.3), flujo visual constante pero ágil
+        // FLUJO DICTADO POR API: si hay alta congestión, más spawn visual;
+        // si flujo libre, flujo constante pero ágil.
         const baseF = Math.max(rawFlow, isMini ? 0.05 : 0.12);
         effectiveFlow = baseF * (1 + _realCongestion * 1.5);
-      } else if (_isRetorno) {
-        // En plan retorno, el carril de salida (Bogotá → Afuera) fluye libremente y con bajo volumen
-        effectiveFlow = isMini ? 0.04 : 0.08;
-      } else if (_isPlenoColapso) {
-        effectiveFlow = isMini ? 1.5 : 4.0;
       } else {
-        // Fallback horario
-        const minVisualFlow = gridlockSalida
-          ? (isMini ? 0.04 : 0.08)
-          : _isNight
-          ? (isMini ? 0.06 : 0.10)
-          : (isMini ? 0.12 : 0.25);
-        effectiveFlow = Math.max(rawFlow, minVisualFlow);
+        // SIN DATOS REALES: flujo visual mínimo (vía asumida fluida).
+        // No simular picos horarios inventados que el usuario interpretaba
+        // como "cola" pero que no eran confirmados por Waze ni APIs.
+        effectiveFlow = isMini ? 0.05 : 0.08;
       }
 
       // Accumulate fractional spawns to guarantee eventual spawn
@@ -834,23 +825,17 @@ export default function TollCanvas({
 
       let retornoFlow;
       let MAX_RETORNO_VEH;
-      
+
       if (_hasRealTraffic) {
         // FLUJO RETORNO DICTADO POR API
         retornoFlow = 0.1 + retornoLanes.length * (_realCongestion * 1.2);
         MAX_RETORNO_VEH = isMini ? 15 : Math.round(retornoLanes.length * (1 + _realCongestion * 6));
       } else {
-        // Fallback horario
-        retornoFlow = (gridlockActive || (_isRetorno && _isPlenoColapso))
-          ? 1.5 + retornoLanes.length * 0.4
-          : _isRetorno
-          ? Math.max(0.3, _retScale * 0.6)
-          : 0.04;
-        MAX_RETORNO_VEH = (gridlockActive || (_isRetorno && _isPlenoColapso))
-          ? (isMini ? 20 : retornoLanes.length * 6)
-          : _isRetorno
-          ? (_isNight ? 4 : (isMini ? 8 : 18))
-          : (_isNight ? 2 : (isMini ? 3 : 5));
+        // SIN DATOS REALES: flujo retorno mínimo (vía asumida fluida).
+        // Antes había fallback horario que inventaba gridlock; ahora si no
+        // hay API data, no asumimos congestión.
+        retornoFlow = 0.04;
+        MAX_RETORNO_VEH = _isNight ? 2 : (isMini ? 3 : 5);
       }
       
       counterAccRef.current += retornoFlow * dt;

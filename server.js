@@ -51,19 +51,20 @@ app.get('/api/traffic/snapshot', (req, res) => {
   res.setHeader('Access-Control-Allow-Headers', '*');
   
   try {
-    const { getStore, getTopWazeJams } = require('./backend/services/trafficPoller');
+    const { getStore, getTopWazeJams, getAllWazeJams } = require('./backend/services/trafficPoller');
     let modeData = {};
     try {
       const fs = require('fs');
       const calPath = path.join(__dirname, 'backend', 'config', 'operationCalendar.json');
       modeData = JSON.parse(fs.readFileSync(calPath, 'utf8'));
     } catch(e) {}
-    
+
     res.json({
       type: 'initial_snapshot',
       data: getStore() || {},
       calendar: modeData,
-      nationalWazeJams: getTopWazeJams() || []
+      nationalWazeJams: getTopWazeJams() || [],
+      nationalWazeJamsAll: getAllWazeJams() || [],
     });
   } catch (err) {
     res.status(500).json({ error: 'Backend poller not initialized yet' });

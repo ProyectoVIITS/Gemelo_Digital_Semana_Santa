@@ -236,10 +236,12 @@ export default function WazeSegmentPage() {
                 <span className="text-[10px] font-mono text-slate-600">Sincronización Continua</span>
               </div>
               <div style={{ height: 260, width: '100%', position: 'relative' }}>
-                 <RoadCanvas 
-                   jamLevel={jam.jamLevel || 3} 
-                   jamSpeed={data.metrics.avgSpeed || 5} 
-                   jamRatio={ratio === '?' ? 1 : parseFloat(ratio)} 
+                 <RoadCanvas
+                   jamLevel={jam.jamLevel || 3}
+                   jamSpeed={data.metrics.avgSpeed || 5}
+                   jamRatio={ratio === '?' ? 1 : parseFloat(ratio)}
+                   polyline={jam.line || []}
+                   jamName={jam.name || null}
                  />
               </div>
             </div>

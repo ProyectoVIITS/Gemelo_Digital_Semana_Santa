@@ -14,7 +14,6 @@ const express = require('express');
 const path = require('path');
 const os = require('os');
 const { initWebSocketServer } = require('./backend/websocketServer');
-const { initSumoProxyRoutes, initSumoProxyWebSocket } = require('./backend/sumoProxy');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -51,27 +50,25 @@ app.get('/api/traffic/snapshot', (req, res) => {
   res.setHeader('Access-Control-Allow-Headers', '*');
   
   try {
-    const { getStore, getTopWazeJams } = require('./backend/services/trafficPoller');
+    const { getStore, getTopWazeJams, getAllWazeJams } = require('./backend/services/trafficPoller');
     let modeData = {};
     try {
       const fs = require('fs');
       const calPath = path.join(__dirname, 'backend', 'config', 'operationCalendar.json');
       modeData = JSON.parse(fs.readFileSync(calPath, 'utf8'));
     } catch(e) {}
-    
+
     res.json({
       type: 'initial_snapshot',
       data: getStore() || {},
       calendar: modeData,
-      nationalWazeJams: getTopWazeJams() || []
+      nationalWazeJams: getTopWazeJams() || [],
+      nationalWazeJamsAll: getAllWazeJams() || [],
     });
   } catch (err) {
     res.status(500).json({ error: 'Backend poller not initialized yet' });
   }
 });
-
-// ── Inicializar proxy SUMO antes del SPA fallback ──
-initSumoProxyRoutes(app);
 
 // ── Static files with aggressive caching for assets ──
 app.use('/static', express.static(path.join(BUILD_DIR, 'static'), {
@@ -100,7 +97,6 @@ const server = app.listen(PORT, '0.0.0.0', () => {
 
 // Init WS
 initWebSocketServer(server);
-initSumoProxyWebSocket(server);
 
 // ── Graceful shutdown ──
 process.on('SIGTERM', () => {

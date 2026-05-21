@@ -8,6 +8,7 @@ export const useTrafficStore = create((set) => ({
   trafficData: {},
   calendar: {},
   nationalWazeJams: [],
+  nationalWazeJamsAll: [],
   isConnected: false,
   isConnecting: false,
   ws: null,
@@ -28,11 +29,17 @@ export const useTrafficStore = create((set) => ({
       try {
         const payload = JSON.parse(event.data);
         if (payload.type === 'initial_snapshot') {
-          set({ trafficData: payload.data || {}, calendar: payload.calendar || {}, nationalWazeJams: payload.nationalWazeJams || [] });
+          set({
+            trafficData: payload.data || {},
+            calendar: payload.calendar || {},
+            nationalWazeJams: payload.nationalWazeJams || [],
+            nationalWazeJamsAll: payload.nationalWazeJamsAll || [],
+          });
         } else if (payload.type === 'traffic_update') {
           set((state) => ({
             trafficData: { ...state.trafficData, ...(payload.data || {}) },
-            nationalWazeJams: payload.nationalWazeJams || state.nationalWazeJams
+            nationalWazeJams: payload.nationalWazeJams || state.nationalWazeJams,
+            nationalWazeJamsAll: payload.nationalWazeJamsAll || state.nationalWazeJamsAll,
           }));
         }
       } catch (e) {}

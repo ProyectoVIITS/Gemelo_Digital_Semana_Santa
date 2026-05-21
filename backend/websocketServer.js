@@ -2,7 +2,7 @@
 const { WebSocketServer } = require('ws');
 const fs = require('fs');
 const path = require('path');
-const { startPoller, getStore, getTopWazeJams } = require('./services/trafficPoller');
+const { startPoller, getStore, getTopWazeJams, getAllWazeJams } = require('./services/trafficPoller');
 
 function initWebSocketServer(server) {
   const wss = new WebSocketServer({ noServer: true });
@@ -30,12 +30,14 @@ function initWebSocketServer(server) {
     } catch(e) { }
 
     const topWazeJams = getTopWazeJams();
+    const allWazeJams = getAllWazeJams();
 
-    ws.send(JSON.stringify({ 
-      type: 'initial_snapshot', 
+    ws.send(JSON.stringify({
+      type: 'initial_snapshot',
       data: getStore(),
       calendar: modeData,
-      nationalWazeJams: topWazeJams 
+      nationalWazeJams: topWazeJams,
+      nationalWazeJamsAll: allWazeJams,
     }));
 
     ws.on('error', console.error);

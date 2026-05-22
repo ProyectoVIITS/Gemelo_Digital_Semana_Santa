@@ -232,11 +232,14 @@ export default function RoadCanvas({
   }, [jamLevel, jamSpeed, jamRatio, vehicleScale]);
 
   useEffect(() => {
+    // Solo actualizar refs — NO resetear queueRef ni polylinePathRef aquí.
+    // El RAF detectará cambios reales de contenido vía pathKey (string con
+    // bbox + dimensiones) y reseteará solo si la geometría cambió de verdad.
+    // Sin este gate, cada broadcast WS (cada ~4s) creaba un array nuevo
+    // (JSON.parse) con mismo contenido, disparaba este effect y reseteaba
+    // los slots a distribución uniforme — el "loop" visible.
     polylineRef.current = polyline;
     bboxRef.current = bbox;
-    polylinePathRef.current = { key: null, path: null, segs: null, totalLen: 0 };
-    queueRef.current = { slots: [], spawnAcc: 0, initialized: false };
-    motoQueueRef.current = { slots: [], spawnAcc: 0, initialized: false };
   }, [polyline, bbox]);
 
   // ResizeObserver: actualiza parentSizeRef

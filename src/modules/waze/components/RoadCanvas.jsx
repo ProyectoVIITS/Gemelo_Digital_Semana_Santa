@@ -201,10 +201,12 @@ export default function RoadCanvas({
   const polylineRef = useRef(polyline);
   const bboxRef = useRef(null);
   const polylinePathRef = useRef({ key: null, path: null, segs: null, totalLen: 0 });
-  // Cola sintetizada para car/truck/bus
-  const queueRef = useRef({ types: [], offset: 0 });
-  // Motos al lindero (separadas)
-  const motoQueueRef = useRef({ count: 0, offset: 0 });
+  // Stream continuo de vehículos (no cinturón con wrap). Cada slot tiene su
+  // propio arc independiente que avanza, "muere" al cruzar el final, y se
+  // respawnea con tipo nuevo al inicio. Evita la sensación de loop visible
+  // que aparecía cuando un slot con tipo fijo se teletransportaba al inicio.
+  const queueRef = useRef({ slots: [], spawnAcc: 0, initialized: false });
+  const motoQueueRef = useRef({ slots: [], spawnAcc: 0, initialized: false });
   const lastTickTimeRef = useRef(0);
 
   const [hasPolyline] = useState(() => Array.isArray(polyline) && polyline.length > 1);
@@ -233,10 +235,8 @@ export default function RoadCanvas({
     polylineRef.current = polyline;
     bboxRef.current = bbox;
     polylinePathRef.current = { key: null, path: null, segs: null, totalLen: 0 };
-    queueRef.current.types = [];
-    queueRef.current.offset = 0;
-    motoQueueRef.current.count = 0;
-    motoQueueRef.current.offset = 0;
+    queueRef.current = { slots: [], spawnAcc: 0, initialized: false };
+    motoQueueRef.current = { slots: [], spawnAcc: 0, initialized: false };
   }, [polyline, bbox]);
 
   // ResizeObserver: actualiza parentSizeRef
@@ -358,10 +358,8 @@ export default function RoadCanvas({
             prevPt = proj;
           }
           polylinePathRef.current = { key: pathKey, path, segs, totalLen: cumLen };
-          queueRef.current.types = [];
-          queueRef.current.offset = 0;
-          motoQueueRef.current.count = 0;
-          motoQueueRef.current.offset = 0;
+          queueRef.current = { slots: [], spawnAcc: 0, initialized: false };
+          motoQueueRef.current = { slots: [], spawnAcc: 0, initialized: false };
         }
         const path = polylinePathRef.current.path;
         const polySegs = polylinePathRef.current.segs;
@@ -417,47 +415,105 @@ export default function RoadCanvas({
         // Stop lights brillan si avg < 15 km/h
         const isBraking = (props.jamSpeed || 0) < 15;
 
-        // ── Cola del atasco (car/truck/bus) ──
-        const queue = queueRef.current;
-        while (queue.types.length < targetN) queue.types.push(pickNonMotoType());
-        while (queue.types.length > targetN) queue.types.pop();
-
         const avgKmh = props.jamSpeed > 0 ? props.jamSpeed : 5;
         const avgMps = avgKmh / 3.6;
         const queueAdvance = avgMps * dt * VISUAL_AMP * pixelsPerMeter;
-        queue.offset += queueAdvance;
-        if (queue.offset > 1e9) queue.offset %= polyTotalLen;
-
         const drawScale = props.vehicleScale * dynamicVehicleScale;
 
-        if (queue.types.length > 0 && polyTotalLen > 0) {
-          const spacing = polyTotalLen / queue.types.length;
-          for (let i = 0; i < queue.types.length; i++) {
-            let arc = (i * spacing + queue.offset) % polyTotalLen;
-            if (arc < 0) arc += polyTotalLen;
-            const point = arcToPoint(arc, polySegs, polyTotalLen);
-            const angleRad = Math.atan2(point.dirNy, point.dirNx);
-            drawVehicle(ctx, point.px, point.py, angleRad, queue.types[i], drawScale, isBraking);
+        // ── Cola del atasco (car/truck/bus) — stream continuo ──
+        // Cada slot tiene su propio arc. Avanza, muere al cruzar el final,
+        // y se respawnea con tipo nuevo en arc=0. No hay "wrap" visible:
+        // el slot que sale del final NO es el mismo que aparece al inicio.
+        const queue = queueRef.current;
+
+        // Primera población: distribuir targetN slots uniformemente sobre
+        // la polilínea para evitar canvas vacío al cargar la página.
+        if (!queue.initialized && targetN > 0 && polyTotalLen > 0) {
+          queue.slots = [];
+          for (let i = 0; i < targetN; i++) {
+            queue.slots.push({
+              arc: (i / targetN) * polyTotalLen,
+              type: pickNonMotoType(),
+            });
           }
+          queue.initialized = true;
+          queue.spawnAcc = 0;
         }
 
-        // ── Motos por el lindero (no participan del atasco) ──
-        motoQueueRef.current.count = targetMotos;
-        motoQueueRef.current.offset += queueAdvance * MOTO_SPEED_MULT;
-        if (motoQueueRef.current.offset > 1e9) motoQueueRef.current.offset %= polyTotalLen;
+        // Advance + cull
+        if (queueAdvance > 0) {
+          for (const s of queue.slots) s.arc += queueAdvance;
+        }
+        queue.slots = queue.slots.filter((s) => s.arc < polyTotalLen);
 
-        if (motoQueueRef.current.count > 0 && polyTotalLen > 0) {
-          const motoSpacing = polyTotalLen / motoQueueRef.current.count;
-          for (let i = 0; i < motoQueueRef.current.count; i++) {
-            let arc = (i * motoSpacing + motoQueueRef.current.offset) % polyTotalLen;
-            if (arc < 0) arc += polyTotalLen;
-            const point = arcToPoint(arc, polySegs, polyTotalLen);
-            // Offset perpendicular hacia la derecha del heading (lindero)
-            const lateralPx = point.px + (-point.dirNy) * MOTO_LATERAL_PX;
-            const lateralPy = point.py + point.dirNx * MOTO_LATERAL_PX;
-            const angleRad = Math.atan2(point.dirNy, point.dirNx);
-            drawVehicle(ctx, lateralPx, lateralPy, angleRad, 'moto', drawScale, false);
+        // Spawn rate: una entrada cada `spacing / advancePerSec` segundos.
+        // Mantiene espaciado uniforme entre vehículos que entran al stream.
+        if (targetN > 0 && polyTotalLen > 0 && queueAdvance > 0) {
+          const spacingPx = polyTotalLen / targetN;
+          const spawnIntervalSec = (spacingPx * dt) / queueAdvance;
+          queue.spawnAcc += dt;
+          while (queue.slots.length < targetN && queue.spawnAcc >= spawnIntervalSec) {
+            queue.spawnAcc -= spawnIntervalSec;
+            queue.slots.push({ arc: 0, type: pickNonMotoType() });
           }
+          // Fill restante (si targetN saltó, ej. polyline cambió)
+          while (queue.slots.length < targetN) {
+            const idx = queue.slots.length;
+            queue.slots.push({
+              arc: (idx / targetN) * polyTotalLen,
+              type: pickNonMotoType(),
+            });
+          }
+        }
+        // Trim si targetN bajó
+        while (queue.slots.length > targetN) queue.slots.pop();
+
+        for (const s of queue.slots) {
+          const point = arcToPoint(s.arc, polySegs, polyTotalLen);
+          const angleRad = Math.atan2(point.dirNy, point.dirNx);
+          drawVehicle(ctx, point.px, point.py, angleRad, s.type, drawScale, isBraking);
+        }
+
+        // ── Motos por el lindero — mismo stream continuo ──
+        const motoQueue = motoQueueRef.current;
+        const motoAdvance = queueAdvance * MOTO_SPEED_MULT;
+
+        if (!motoQueue.initialized && targetMotos > 0 && polyTotalLen > 0) {
+          motoQueue.slots = [];
+          for (let i = 0; i < targetMotos; i++) {
+            motoQueue.slots.push({ arc: (i / targetMotos) * polyTotalLen });
+          }
+          motoQueue.initialized = true;
+          motoQueue.spawnAcc = 0;
+        }
+
+        if (motoAdvance > 0) {
+          for (const s of motoQueue.slots) s.arc += motoAdvance;
+        }
+        motoQueue.slots = motoQueue.slots.filter((s) => s.arc < polyTotalLen);
+
+        if (targetMotos > 0 && polyTotalLen > 0 && motoAdvance > 0) {
+          const motoSpacingPx = polyTotalLen / targetMotos;
+          const motoSpawnIntervalSec = (motoSpacingPx * dt) / motoAdvance;
+          motoQueue.spawnAcc += dt;
+          while (motoQueue.slots.length < targetMotos && motoQueue.spawnAcc >= motoSpawnIntervalSec) {
+            motoQueue.spawnAcc -= motoSpawnIntervalSec;
+            motoQueue.slots.push({ arc: 0 });
+          }
+          while (motoQueue.slots.length < targetMotos) {
+            const idx = motoQueue.slots.length;
+            motoQueue.slots.push({ arc: (idx / targetMotos) * polyTotalLen });
+          }
+        }
+        while (motoQueue.slots.length > targetMotos) motoQueue.slots.pop();
+
+        for (const s of motoQueue.slots) {
+          const point = arcToPoint(s.arc, polySegs, polyTotalLen);
+          // Offset perpendicular hacia la derecha del heading (lindero)
+          const lateralPx = point.px + (-point.dirNy) * MOTO_LATERAL_PX;
+          const lateralPy = point.py + point.dirNx * MOTO_LATERAL_PX;
+          const angleRad = Math.atan2(point.dirNy, point.dirNx);
+          drawVehicle(ctx, lateralPx, lateralPy, angleRad, 'moto', drawScale, false);
         }
       }
 

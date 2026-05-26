@@ -96,6 +96,19 @@ export default function WazeSegmentPage() {
           }}>
             NIVEL {jam.jamLevel}
           </span>
+          {jam.pr && (
+            <span
+              className="text-[7px] font-mono font-bold px-1.5 py-0.5 rounded border"
+              title={`Punto de Referencia INVÍAS más cercano (a ${jam.pr.distanciaM} m)`}
+              style={{
+                backgroundColor: 'rgba(168, 85, 247, 0.18)',
+                color: '#c4b5fd',
+                borderColor: 'rgba(168, 85, 247, 0.5)',
+              }}
+            >
+              {jam.pr.display}
+            </span>
+          )}
           {hasAccident && <span className="text-[7px] font-mono font-bold px-1.5 py-0.5 rounded bg-red-500/15 text-red-400">ACCIDENTE</span>}
           {isClosed && <span className="text-[7px] font-mono font-bold px-1.5 py-0.5 rounded bg-red-900/30 text-red-500">VÍA CERRADA</span>}
         </div>

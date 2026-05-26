@@ -222,11 +222,23 @@ async function pollOneStation(stationId) {
   return fused;
 }
 
+// Enriquece un jam con el PR (Punto de Referencia) INVÍAS más cercano.
+// Si está a más de 2km (vías urbanas sin PR), pr = null. Caché LRU
+// por uuid en prMatcher → no recomputa entre llamadas.
+const { matchPR } = require('./prMatcher');
+
+function withPR(jam) {
+  if (!jam) return jam;
+  // Inyectar sin mutar el objeto original del cache Waze
+  return { ...jam, pr: matchPR(jam) };
+}
+
 function getTopWazeJams() {
   return (wazeTvtCache.data || [])
     .filter(j => j.jamLevel >= 3 && j.type !== 'STATIC')
     .sort((a, b) => (b.jamLevel - a.jamLevel) || ((b.length || 0) - (a.length || 0)))
-    .slice(0, 10);
+    .slice(0, 10)
+    .map(withPR);
 }
 
 // Devuelve TODOS los jams Waze activos (sin filtro de jamLevel, sin slice).
@@ -234,7 +246,8 @@ function getTopWazeJams() {
 // cobertura nacional completa. Filtra solo entradas STATIC y level 0.
 function getAllWazeJams() {
   return (wazeTvtCache.data || [])
-    .filter(j => j && j.jamLevel >= 1 && j.type !== 'STATIC');
+    .filter(j => j && j.jamLevel >= 1 && j.type !== 'STATIC')
+    .map(withPR);
 }
 
 let globalRRIndex = 0;

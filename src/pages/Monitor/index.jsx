@@ -793,7 +793,21 @@ function AlertaDITRA({ corridorData }) {
                     <span className="px-1 py-0.5 rounded text-[8px] font-mono font-bold border border-teal-500/30" style={{
                        background: 'linear-gradient(45deg, rgba(20,184,166,0.2), rgba(20,184,166,0.05))', color: '#2dd4bf'
                     }}>GEMELO DIGITAL LIVE</span>
-                    <span className="text-[9px] text-slate-400">Punto Geográfico Exacto DITRA</span>
+                    {jam.pr ? (
+                      <span
+                        className="px-1.5 py-0.5 rounded text-[8px] font-mono font-bold border"
+                        title={`Punto de Referencia INVÍAS más cercano: ${jam.pr.display} (a ${jam.pr.distanciaM} m del incidente)`}
+                        style={{
+                          background: 'rgba(168, 85, 247, 0.18)',
+                          color: '#c4b5fd',
+                          borderColor: 'rgba(168, 85, 247, 0.5)',
+                        }}
+                      >
+                        {jam.pr.display}
+                      </span>
+                    ) : (
+                      <span className="text-[9px] text-slate-400">Punto Geográfico Exacto DITRA</span>
+                    )}
                   </div>
                 </div>
 

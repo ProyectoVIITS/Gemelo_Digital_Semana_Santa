@@ -146,10 +146,18 @@ function DepartmentCard({ deptGroup }) {
                     pathOptions={{ color: c, weight: 5, opacity: 0.95 }}
                   >
                     <LTooltip direction="top" sticky opacity={0.95}>
-                      <div style={{ fontSize: 10, lineHeight: 1.4, maxWidth: 240 }}>
+                      <div style={{ fontSize: 10, lineHeight: 1.4, maxWidth: 260 }}>
                         <div style={{ fontWeight: 'bold', color: '#0f172a' }}>
                           {jam.name || 'Tramo'}
                         </div>
+                        {jam.pr && (
+                          <div style={{ color: '#7c3aed', fontWeight: 600, marginTop: 2 }}>
+                            {jam.pr.display}{' '}
+                            <span style={{ color: '#64748b', fontWeight: 400 }}>
+                              (a {jam.pr.distanciaM} m)
+                            </span>
+                          </div>
+                        )}
                         <div style={{ color: '#1e293b', marginTop: 2 }}>
                           Nivel <b style={{ color: c }}>{jam.jamLevel}</b>
                           {' · '}{km} km{' · '}{min} min{' · '}<b>{ratio}x</b>
@@ -189,6 +197,18 @@ function DepartmentCard({ deptGroup }) {
                   <span className="text-slate-300 truncate flex-1">
                     {jam.name || 'Tramo sin nombre'}
                   </span>
+                  {jam.pr && (
+                    <span
+                      className="text-[9px] font-mono whitespace-nowrap px-1 py-0.5 rounded"
+                      style={{
+                        background: 'rgba(168, 85, 247, 0.15)',
+                        color: '#c4b5fd',
+                      }}
+                      title={`A ${jam.pr.distanciaM} m del incidente`}
+                    >
+                      {jam.pr.display}
+                    </span>
+                  )}
                   <span className="text-slate-500 font-mono whitespace-nowrap">
                     {km}km · {min}min
                   </span>

@@ -481,7 +481,7 @@ export default function CorridorPage() {
       <footer className="fixed bottom-0 left-0 right-0 z-40 h-8 flex items-center justify-between px-4 text-[9px] font-mono"
         style={{ backgroundColor: '#040a14', borderTop: '1px solid #1a2d4a', color: '#475569' }}>
         <span>DITRA · INVÍAS · {corridor.name}</span>
-        <span>{corridor.tollStations.length} peajes · DATOS SIMULADOS</span>
+        <span>{corridor.tollStations.length} peajes · DATOS EN VIVO</span>
         <span>{new Date().toLocaleString('es-CO', { hour12: false })} · VIITS-NEXUS v2.0</span>
       </footer>
     </div>

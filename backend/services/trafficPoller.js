@@ -250,9 +250,13 @@ function getAllWazeJams() {
     .map(withPR);
 }
 
+// Intervalo de polling para refrescar TODOS los peajes. Por defecto 1 hora
+// (alineado con el TTL del feed Waze, que es la fuente dominante de jams).
+// Sobreescribible vía env POLL_INTERVAL_MS (en milisegundos).
+const POLL_INTERVAL_MS = parseInt(process.env.POLL_INTERVAL_MS, 10) || 3600000;
 let globalRRIndex = 0;
 function startPoller(wss) {
-  console.log(`[Backend-Poller] Iniciando polling para ${ALL_STATIONS.length} peajes...`);
+  console.log(`[Backend-Poller] Iniciando polling para ${ALL_STATIONS.length} peajes (cada ${Math.round(POLL_INTERVAL_MS/60000)} min)...`);
   
   // Enviar batch de actualizaciones cada vez que cambia el store
   const broadcast = () => {
@@ -284,25 +288,26 @@ function startPoller(wss) {
     });
   };
 
-  setInterval(async () => {
-    // Poll 2 stations at a time
-    for (let b = 0; b < 2; b++) {
-      const sid = ALL_STATIONS[globalRRIndex % ALL_STATIONS.length];
-      globalRRIndex++;
-      try { await pollOneStation(sid); } catch(e){}
-    }
-    broadcast();
-  }, 4000);
-
-  // Initial Burst
-  (async () => {
+  // Ronda completa horaria: actualiza TODOS los peajes y emite broadcast único
+  // al final. Esto sustituye al round-robin de 2 estaciones cada 4 s que daba
+  // sensación de movimiento pero leía la misma cache horaria de Waze.
+  const runFullSweep = async (label) => {
+    const t0 = Date.now();
     for (const sid of ALL_STATIONS) {
       try { await pollOneStation(sid); } catch(e){}
       await new Promise(r=>setTimeout(r,500));
     }
     broadcast();
-    console.log('[Backend-Poller] Primera ronda inicializada con éxito.');
-  })();
+    const secs = Math.round((Date.now() - t0) / 1000);
+    const next = new Date(Date.now() + POLL_INTERVAL_MS).toLocaleTimeString('es-CO', { timeZone: 'America/Bogota' });
+    console.log(`[Backend-Poller] ${label} completada en ${secs}s. Próxima ronda: ${next}`);
+  };
+
+  // Initial Burst (al arrancar)
+  runFullSweep('Primera ronda');
+
+  // Polling periódico
+  setInterval(() => runFullSweep('Ronda horaria'), POLL_INTERVAL_MS);
 
   // ── Snapshot Horario Automatizado (Requerimiento Usuario) ──
   setInterval(() => {

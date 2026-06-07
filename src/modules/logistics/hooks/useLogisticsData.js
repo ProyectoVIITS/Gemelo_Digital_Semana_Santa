@@ -47,6 +47,76 @@ import {
 const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
 
 /**
+ * Distancia haversine en km entre dos puntos lat/lng.
+ */
+function haversineKm(lat1, lng1, lat2, lng2) {
+  const R = 6371;
+  const dLat = ((lat2 - lat1) * Math.PI) / 180;
+  const dLng = ((lng2 - lng1) * Math.PI) / 180;
+  const a =
+    Math.sin(dLat / 2) ** 2 +
+    Math.cos((lat1 * Math.PI) / 180) *
+      Math.cos((lat2 * Math.PI) / 180) *
+      Math.sin(dLng / 2) ** 2;
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+}
+
+/**
+ * Distancia mínima (km) desde un punto a cualquier vértice de la polyline.
+ * Aproximación suficiente para atribución de jams Waze a segmentos.
+ */
+function minDistKmToPolyline(lat, lng, polyline) {
+  if (!Array.isArray(polyline) || polyline.length === 0) return Infinity;
+  let min = Infinity;
+  for (const [pLat, pLng] of polyline) {
+    const d = haversineKm(lat, lng, pLat, pLng);
+    if (d < min) min = d;
+  }
+  return min;
+}
+
+const JAM_MATCH_RADIUS_KM = 5; // jams a <5 km del polyline se atribuyen al segmento
+
+/**
+ * Atribuye jams Waze a un segmento por proximidad geográfica y deriva un IRT
+ * representativo (0..100) a partir del peor jam + densidad acumulada.
+ *
+ * Cada jam tiene: { level: 0..5, length: metros, line: [{x:lng, y:lat}, ...] }
+ */
+function matchJamsToSegment(allJams, segment) {
+  if (!Array.isArray(allJams) || allJams.length === 0 ||
+      !Array.isArray(segment.polyline) || segment.polyline.length === 0) {
+    return { irt: 0, jamCount: 0, maxLevel: 0, totalLengthKm: 0 };
+  }
+  const matched = [];
+  for (const jam of allJams) {
+    const anchor = jam.line?.[0] || jam.location || null;
+    const lat = anchor?.y ?? anchor?.lat;
+    const lng = anchor?.x ?? anchor?.lng;
+    if (lat == null || lng == null) continue;
+    const d = minDistKmToPolyline(lat, lng, segment.polyline);
+    if (d <= JAM_MATCH_RADIUS_KM) matched.push(jam);
+  }
+  if (matched.length === 0) return { irt: 0, jamCount: 0, maxLevel: 0, totalLengthKm: 0 };
+
+  const maxLevel = matched.reduce((m, j) => Math.max(m, j.jamLevel ?? j.level ?? 0), 0);
+  const totalLengthKm =
+    matched.reduce((s, j) => s + (j.length || 0), 0) / 1000;
+  // IRT base: nivel máximo 0..5 → 0..75. Bonus por longitud acumulada de jams.
+  const irt = clamp(
+    Math.round(maxLevel * 15 + Math.min(totalLengthKm, 12) * 2),
+    0,
+    100,
+  );
+  return {
+    irt,
+    jamCount: matched.length,
+    maxLevel,
+    totalLengthKm: Math.round(totalLengthKm * 10) / 10,
+  };
+}
+
+/**
  * Deriva el IRT de un peaje desde los datos reales del store.
  * Misma lógica que useTollData.deriveTollIRT — sin números mágicos por peaje.
  * Sin datos = IRT bajo (12) honesto, no inventado.
@@ -126,11 +196,13 @@ function buildTollAggregate(tollId, trafficData) {
 
 /**
  * Enriquecimiento por segmento.
- *  - Si el segmento referencia peajes, IRT = computeIRT(velocidad ponderada,
- *    flujo medio por peaje, cola, segment.speedLimit).
- *  - Si no, fallback honesto al 60% del IRT promedio del corredor.
+ *  - IRT desde peajes (computeIRT con flujo/velocidad/cola/límite).
+ *  - IRT desde jams Waze que caen dentro de un radio del polyline.
+ *  - IRT efectivo = max(peajes, jams).
+ *  - Si el segmento no tiene peajes monitoreados Y no hay jams cercanos,
+ *    fallback honesto al 60% del IRT promedio del corredor.
  */
-function enrichSegment(segment, tollAggregatesById, corridorAvgIRT) {
+function enrichSegment(segment, tollAggregatesById, corridorAvgIRT, wazeJams) {
   const fromNodeId = segment.fromNodeId;
   const toNodeId = segment.toNodeId;
   // fromName / toName se resuelven en enrichCorridor (necesita acceso a nodes)
@@ -143,15 +215,14 @@ function enrichSegment(segment, tollAggregatesById, corridorAvgIRT) {
   const Ndata = tolls.filter(t => t.hasData).length;
   const speedLimit = segment.speedLimit || 80;
 
-  let irt;
+  let irtTolls;
   let avgSpeed;
   let flow;
   let queue;
 
   if (N === 0) {
-    // Tramo sin peaje monitoreado: asumir mejor flujo que el peaje promedio.
-    irt = Math.round((corridorAvgIRT || 0) * 0.6);
-    avgSpeed = Math.round(speedLimit * (1 - (irt / 100) * 0.6));
+    irtTolls = Math.round((corridorAvgIRT || 0) * 0.6);
+    avgSpeed = Math.round(speedLimit * (1 - (irtTolls / 100) * 0.6));
     flow = 0;
     queue = 0;
   } else {
@@ -161,11 +232,16 @@ function enrichSegment(segment, tollAggregatesById, corridorAvgIRT) {
     );
     flow = tolls.reduce((s, t) => s + t.flow, 0);
     queue = tolls.reduce((s, t) => s + t.queue, 0);
-    // computeIRT espera flujo POR carril/peaje; normalizamos por N para que
-    // el divisor 600 de la fórmula DITRA no se infle al sumar peajes.
-    irt = computeIRT(avgSpeed, flow / Math.max(N, 1), queue, speedLimit);
+    irtTolls = computeIRT(avgSpeed, flow / Math.max(N, 1), queue, speedLimit);
   }
 
+  // Jams Waze cercanos al polyline del segmento (matching geográfico).
+  const jamMatch = matchJamsToSegment(wazeJams || [], segment);
+
+  // IRT efectivo = max(peajes, jams). Cualquiera de las dos señales puede
+  // pintar el segmento en rojo. Si un jam Waze nivel 5 cae sobre la vía,
+  // domina sobre el peaje (que podría no haber sensado el evento).
+  const irt = Math.max(irtTolls, jamMatch.irt);
   const level = getIRTLevel(irt);
 
   return {
@@ -189,6 +265,12 @@ function enrichSegment(segment, tollAggregatesById, corridorAvgIRT) {
     queue,
     tollsConsidered: N,
     tollsWithData: Ndata,
+    // Atribución de eventos Waze al tramo (información lateral, no oculta IRT)
+    wazeJamCount: jamMatch.jamCount,
+    wazeMaxLevel: jamMatch.maxLevel,
+    wazeJamLengthKm: jamMatch.totalLengthKm,
+    irtFromTolls: irtTolls,
+    irtFromJams: jamMatch.irt,
   };
 }
 
@@ -196,7 +278,7 @@ function enrichSegment(segment, tollAggregatesById, corridorAvgIRT) {
  * Enriquece un corredor logístico completo. Devuelve el corredor original
  * extendido con segmentos enriquecidos y un `kpi` agregado.
  */
-function enrichCorridor(corridor, trafficData) {
+function enrichCorridor(corridor, trafficData, wazeJams) {
   if (!corridor) return null;
 
   // 1) Agregados por peaje (una sola vez por corredor).
@@ -225,7 +307,7 @@ function enrichCorridor(corridor, trafficData) {
 
   // 4) Segmentos enriquecidos.
   const segments = (corridor.segments || []).map(seg => {
-    const enriched = enrichSegment(seg, tollAggregatesById, preliminaryAvgIRT);
+    const enriched = enrichSegment(seg, tollAggregatesById, preliminaryAvgIRT, wazeJams);
     const from = nodeById[seg.fromNodeId];
     const to = nodeById[seg.toNodeId];
     return {
@@ -286,10 +368,12 @@ export default function useLogisticsData(corridorId) {
   // Suscripciones mínimas al store (un selector cada una para evitar
   // re-render innecesario por cambios no relacionados).
   const trafficData = useTrafficStore(s => s.trafficData);
+  const wazeJams = useTrafficStore(s => s.nationalWazeJamsAll);
   const isConnected = useTrafficStore(s => s.isConnected);
 
   const result = useMemo(() => {
-    const hasData = trafficData && Object.keys(trafficData).length > 0;
+    const hasData = (trafficData && Object.keys(trafficData).length > 0)
+      || (Array.isArray(wazeJams) && wazeJams.length > 0);
 
     if (corridorId) {
       const normalizedId = String(corridorId).toUpperCase();
@@ -297,22 +381,24 @@ export default function useLogisticsData(corridorId) {
         || LOGISTICS_CORRIDORS.find(c => c.id === normalizedId)
         || null;
       return {
-        corridor: enrichCorridor(base, trafficData),
+        corridor: enrichCorridor(base, trafficData, wazeJams),
         corridors: null,
         isConnected,
         hasData,
+        wazeJamCount: Array.isArray(wazeJams) ? wazeJams.length : 0,
         timestamp: Date.now(),
       };
     }
 
     return {
       corridor: null,
-      corridors: LOGISTICS_CORRIDORS.map(c => enrichCorridor(c, trafficData)),
+      corridors: LOGISTICS_CORRIDORS.map(c => enrichCorridor(c, trafficData, wazeJams)),
       isConnected,
       hasData,
+      wazeJamCount: Array.isArray(wazeJams) ? wazeJams.length : 0,
       timestamp: Date.now(),
     };
-  }, [corridorId, trafficData, isConnected]);
+  }, [corridorId, trafficData, wazeJams, isConnected]);
 
   return result;
 }

@@ -1,6 +1,6 @@
 import React from 'react';
 import { Link } from 'react-router-dom';
-import { Map, Building2, Shield, Activity, ShieldAlert } from 'lucide-react';
+import { Map, Building2, Shield, Activity, ShieldAlert, Truck } from 'lucide-react';
 
 const modules = [
   {
@@ -41,6 +41,19 @@ const modules = [
     status: 'Nuevo Módulo',
     statusColor: '#0ea5e9',
     tags: ['Deck.gl 3D', 'Data DITRA', 'Análisis Experto', 'GPU Render'],
+  },
+  {
+    title: 'Corredores Logísticos',
+    subtitle: 'Carga pesada y comercio exterior — INVÍAS',
+    description: 'Análisis de corredores logísticos nacionales: heatmap de congestión, peajes estratégicos y desempeño de carga sobre red primaria.',
+    path: '/logistics',
+    icon: Truck,
+    accent: '#a855f7',
+    accentBg: 'rgba(168, 85, 247, 0.08)',
+    accentBorder: 'rgba(168, 85, 247, 0.25)',
+    status: 'Nuevo Módulo',
+    statusColor: '#0ea5e9',
+    tags: ['Corredores carga', 'Heatmap', 'Peajes', 'INVÍAS'],
   },
 ];
 

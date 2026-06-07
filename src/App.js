@@ -10,6 +10,9 @@ import WazeSegmentPage from './modules/waze/WazeSegmentPage';
 import FiscalizacionPage from './modules/fiscalizacion/FiscalizacionPage';
 import FiscalizacionTollPage from './modules/fiscalizacion/FiscalizacionTollPage';
 import AccidentAnalyzer from './pages/AccidentAnalyzer';
+import LogisticsCorridorsPage from './modules/logistics/LogisticsCorridorsPage';
+import LogisticsCorridorDetail from './modules/logistics/LogisticsCorridorDetail';
+import LogisticsSegmentDetailPage from './modules/logistics/LogisticsSegmentDetailPage';
 
 export default function App() {
   return (
@@ -27,6 +30,10 @@ export default function App() {
         {/* Módulo privado — Fiscalización Autopistas del Café */}
         <Route path="/fiscalizacion" element={<FiscalizacionPage />} />
         <Route path="/fiscalizacion/:tollId" element={<FiscalizacionTollPage />} />
+        {/* Módulo Corredores Logísticos */}
+        <Route path="/logistics" element={<LogisticsCorridorsPage />} />
+        <Route path="/logistics/:corridorId" element={<LogisticsCorridorDetail />} />
+        <Route path="/logistics/:corridorId/:segmentId" element={<LogisticsSegmentDetailPage />} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     </BrowserRouter>

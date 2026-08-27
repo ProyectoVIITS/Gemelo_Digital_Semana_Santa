@@ -5,7 +5,7 @@ import TerritorioVivo from '../components/TerritorioVivo';
 
 const modules = [
   {
-    title: 'Monitor NEXUS — Semana Santa 2026',
+    title: 'Monitor NEXUS',
     subtitle: 'Sala de control virtual DITRA — 7 corredores, 37 peajes',
     description: 'Monitor multicanal de corredores críticos con mapa de Colombia, IRT en tiempo real, alertas globales y gráfica comparativa.',
     path: '/monitor',
